@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { db } from '../db/db';
 import { Badge, Button, Card, PageHeader, Select, cx } from '../components/ui';
+import { useSessao } from '../lib/sessao';
 import { useLookups } from '../lib/lookups';
 import { MESES, dateStr, todayStr } from '../lib/format';
 import { statusOs } from '../lib/catalogs';
@@ -13,6 +14,7 @@ const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function Agenda() {
   const l = useLookups();
+  const { usuario } = useSessao();
   const hoje = new Date();
   const [ref, setRef] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
   const [tecnico, setTecnico] = useState('');
@@ -53,7 +55,7 @@ export default function Agenda() {
               <option value="">Todos os técnicos</option>
               {l.profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
             </Select>
-            <Link to="/os/nova"><Button>Nova OS</Button></Link>
+            {usuario.perfil !== 'tecnico' && <Link to="/os/nova"><Button>Nova OS</Button></Link>}
           </>
         }
       />
@@ -110,7 +112,7 @@ export default function Agenda() {
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {doDia.map((o) => (
               <li key={o.id}>
-                <Link to={`/os/${o.id}`} className="block px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <Link to={`${usuario.perfil === 'tecnico' ? '/campo/os/' : '/os/'}${o.id}`} className="block px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-xs font-semibold text-brand-700 dark:text-brand-300">{o.numero}</span>
                     <Badge className={statusOs(o.status).cor}>{statusOs(o.status).label}</Badge>

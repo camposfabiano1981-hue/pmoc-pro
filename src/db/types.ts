@@ -105,8 +105,53 @@ export interface Equipamento extends Base {
   centroCusto?: string;
   status: StatusEquipamento;
   planoId?: ID;
+  /** Data da 1ª execução prevista das rotinas ao aplicar o plano */
+  inicioPlano?: string;
   foto?: string;
   observacoes?: string;
+}
+
+/**
+ * Rotina de manutenção do equipamento (atividade × periodicidade própria).
+ * O controle de periodicidade é feito por equipamento: cada rotina guarda a
+ * última execução e calcula a próxima (última + intervalo em dias).
+ */
+export interface Rotina extends Base {
+  equipamentoId: ID;
+  planoId?: ID;
+  atividadeId?: ID;
+  grupo: string;
+  descricao: string;
+  tipo: 'check' | 'medicao';
+  unidade?: string;
+  min?: number;
+  max?: number;
+  periodicidade: Periodicidade;
+  intervaloDias: number;
+  tempoMin: number;
+  setor?: string;
+  responsavelId?: ID;
+  material?: string;
+  ultimaExecucao?: string;
+  proximaExecucao: string;
+  reprogramada?: boolean;
+  personalizada?: boolean;
+  ativa: boolean;
+  ordem?: number;
+}
+
+/** Registro de execução de uma rotina (histórico por equipamento). */
+export interface Execucao extends Base {
+  rotinaId: ID;
+  equipamentoId: ID;
+  osId?: ID;
+  data: string;
+  status: 'E' | 'N' | 'P';
+  executorId?: ID;
+  valor?: string;
+  condicao?: ResultadoItem;
+  obs?: string;
+  tempoRealMin?: number;
 }
 
 export interface AtividadePlano {
@@ -147,6 +192,10 @@ export interface Profissional extends Base {
   email?: string;
   valorHora?: number;
   cor?: string;
+  /** Perfil de acesso: técnico lança execuções; supervisor libera OS; gestor administra tudo */
+  perfil?: 'tecnico' | 'supervisor' | 'gestor';
+  pin?: string;
+  setor?: string;
   admissao?: string;
   asoValidade?: string;
   cnhValidade?: string;
@@ -243,7 +292,10 @@ export interface Pmoc extends Base {
 
 export type ResultadoItem = '' | 'ok' | 'nok' | 'corrigido' | 'na';
 
+export type StatusExecucao = '' | 'E' | 'P' | 'N';
+
 export interface ItemChecklist {
+  rotinaId?: ID;
   atividadeId?: ID;
   grupo?: string;
   descricao: string;
@@ -253,6 +305,15 @@ export interface ItemChecklist {
   min?: number;
   max?: number;
   resultado: ResultadoItem;
+  /** E = executado, P = pendente, N = não executado */
+  execucao?: StatusExecucao;
+  executorId?: ID;
+  dataExecucao?: string;
+  tempoPrevistoMin?: number;
+  tempoRealMin?: number;
+  servico?: string;
+  material?: string;
+  dataPrevista?: string;
   valor?: string;
   obs?: string;
 }
@@ -278,6 +339,8 @@ export interface ItemOsEquip {
   medicoes: Medicoes;
   obs?: string;
   concluido?: boolean;
+  /** Alteração da localização (destino) aplicada ao concluir a OS */
+  novoAmbienteId?: ID;
 }
 
 export interface ItemPeca {
@@ -345,6 +408,20 @@ export interface OS extends Base {
   recomendacoes?: string;
   responsavelId?: ID;
   tecnicosIds: ID[];
+  setorExecutante?: string;
+  centroCusto?: string;
+  fornecedorId?: ID;
+  tempoPrevistoMin?: number;
+  interferenciaPrevistaMin?: number;
+  garantia?: string;
+  observacoes?: string;
+  paradaInicio?: string;
+  paradaFim?: string;
+  interferencia?: string;
+  supervisorId?: ID;
+  assinaturaSupervisor?: string;
+  liberacao?: string;
+  criadoPor?: string;
   dataAbertura: string;
   dataAgendada?: string;
   prazo?: string;
@@ -363,7 +440,7 @@ export interface OS extends Base {
   docAssinante?: string;
   avaliacao?: number;
   preventivaRef?: string;
-  historico: { data: string; texto: string }[];
+  historico: { data: string; texto: string; usuario?: string }[];
 }
 
 export interface Ocorrencia extends Base {
@@ -451,6 +528,8 @@ export interface Empresa {
   logo?: string;
   rodape?: string;
   corPrimaria?: string;
+  /** PIN opcional para entrar como gestor (controle de acesso local) */
+  pinGestor?: string;
 }
 
 export interface Setting {

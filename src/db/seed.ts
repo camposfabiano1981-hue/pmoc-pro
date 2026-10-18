@@ -1,4 +1,4 @@
-import { db, EMPRESA_PADRAO, getSetting, nextNumber, nowIso, setSetting, uid } from './db';
+import { ALL_TABLES, db, EMPRESA_PADRAO, getSetting, nextNumber, nowIso, setSetting, uid } from './db';
 import { PLANOS_PADRAO, planoSugerido } from './planosPadrao';
 import type {
   AnaliseAr, Ambiente, Cliente, Contrato, Equipamento, Fornecedor, Ocorrencia, Orcamento, OS, Peca, Pmoc,
@@ -6,6 +6,7 @@ import type {
 } from './types';
 import { addDays, dateStr, localDateTimeStr, todayStr } from '../lib/format';
 import { gerarPreventivas } from '../lib/preventivas';
+import { aplicarPlano, migrarRotinas, registrarExecucoesDaOS } from '../lib/rotinas';
 import { RECOMENDACOES_PADRAO } from '../lib/catalogs';
 
 const stamp = () => {
@@ -19,6 +20,7 @@ export async function ensureBase(): Promise<void> {
   if (count === 0) await db.planos.bulkPut(PLANOS_PADRAO);
   const emp = await db.settings.get('empresa');
   if (!emp) await setSetting('empresa', EMPRESA_PADRAO);
+  await migrarRotinas();
 }
 
 export async function isInitialized(): Promise<boolean> {
@@ -37,8 +39,13 @@ const rnd = () => {
 };
 
 export async function seedDemo(): Promise<void> {
-  s = 42;
   await ensureBase();
+  // uma única transação: rápido e sem disparar atualizações de tela a cada gravação
+  await db.transaction('rw', [...ALL_TABLES.map((t) => db.table(t)), db.settings], seedDados);
+}
+
+async function seedDados(): Promise<void> {
+  s = 42;
   await setSetting('empresa', {
     ...EMPRESA_PADRAO,
     razaoSocial: 'Clima Forte Refrigeração e Climatização Ltda (DEMONSTRAÇÃO)',
@@ -58,28 +65,28 @@ export async function seedDemo(): Promise<void> {
   const hoje = todayStr();
   const profs: Profissional[] = [
     {
-      id: uid(), ...stamp(), nome: 'Eng. Carlos Andrade (exemplo)', cpf: '', funcao: 'Engenheiro Mecânico', conselho: 'CREA',
+      id: uid(), ...stamp(), nome: 'Eng. Carlos Andrade (exemplo)', cpf: '', funcao: 'Engenheiro Mecânico', perfil: 'supervisor', setor: 'Equipe PMOC com ART', conselho: 'CREA',
       registro: 'MS-000000/D', especialidades: 'Responsável técnico PMOC, projetos HVAC', telefone: '(67) 99999-0001',
       email: 'rt@exemplo.com.br', valorHora: 180, cor: '#0e7490', asoValidade: addDays(hoje, 200),
       certificacoes: [{ nome: 'NR-10 Básico', validade: addDays(hoje, 400) }, { nome: 'NR-35 Trabalho em Altura', validade: addDays(hoje, 25) }],
       ativo: true,
     },
     {
-      id: uid(), ...stamp(), nome: 'João Pereira (exemplo)', funcao: 'Técnico em Refrigeração', conselho: 'CFT', registro: 'CFT-000001',
+      id: uid(), ...stamp(), nome: 'João Pereira (exemplo)', funcao: 'Técnico em Refrigeração', perfil: 'tecnico', setor: 'Manutenção', conselho: 'CFT', registro: 'CFT-000001',
       especialidades: 'Split, VRF, câmara fria, brasagem', telefone: '(67) 99999-0002', valorHora: 85, cor: '#7c3aed',
       asoValidade: addDays(hoje, 90),
       certificacoes: [{ nome: 'NR-10 Básico', validade: addDays(hoje, 300) }, { nome: 'NR-35 Trabalho em Altura', validade: addDays(hoje, 150) }, { nome: 'Recolhimento de Fluidos (CTF/IBAMA)', validade: addDays(hoje, 700) }],
       ativo: true,
     },
     {
-      id: uid(), ...stamp(), nome: 'Paulo Santos (exemplo)', funcao: 'Técnico em Eletrotécnica', conselho: 'CFT', registro: 'CFT-000002',
+      id: uid(), ...stamp(), nome: 'Paulo Santos (exemplo)', funcao: 'Técnico em Eletrotécnica', perfil: 'tecnico', setor: 'Elétrica', conselho: 'CFT', registro: 'CFT-000002',
       especialidades: 'Comandos elétricos, automação, inversores', telefone: '(67) 99999-0003', valorHora: 85, cor: '#ea580c',
       asoValidade: addDays(hoje, -10),
       certificacoes: [{ nome: 'NR-10 SEP', validade: addDays(hoje, 220) }, { nome: 'NR-35 Trabalho em Altura', validade: addDays(hoje, -5) }],
       ativo: true,
     },
     {
-      id: uid(), ...stamp(), nome: 'Marcos Lima (exemplo)', funcao: 'Ajudante', telefone: '(67) 99999-0004', valorHora: 40, cor: '#16a34a',
+      id: uid(), ...stamp(), nome: 'Marcos Lima (exemplo)', funcao: 'Ajudante', perfil: 'tecnico', setor: 'Manutenção', telefone: '(67) 99999-0004', valorHora: 40, cor: '#16a34a',
       asoValidade: addDays(hoje, 300), certificacoes: [{ nome: 'NR-35 Trabalho em Altura', validade: addDays(hoje, 360) }], ativo: true,
     },
   ];
@@ -267,52 +274,76 @@ export async function seedDemo(): Promise<void> {
   }
   await db.pmocs.bulkAdd(pmocs);
 
-  // ---------- Preventivas: histórico dos meses anteriores + mês atual ----------
-  const tecIds = [tec1.id, ajud.id];
-  for (let k = -6; k <= 0; k++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + k, 1);
-    await gerarPreventivas({ pmocIds: pmocs.map((p) => p.id), ano: d.getFullYear(), mes0: d.getMonth(), agrupamento: 'unidade', dia: 12, responsavelId: tec1.id, tecnicosIds: tecIds });
+  // ---------- Rotinas por equipamento + histórico de execução ----------
+  for (const e of equipamentos) {
+    await db.equipamentos.update(e.id, { inicioPlano: inicioVig });
+    await aplicarPlano(e.id, inicioVig);
   }
-  const prevs = await db.os.toArray();
   const eqMap = new Map(equipamentos.map((e) => [e.id, e]));
-  const updates: OS[] = [];
-  for (const os of prevs) {
-    const ag = new Date(os.dataAgendada + 'T08:00:00');
-    const passado = ag < new Date(now.getFullYear(), now.getMonth(), 1);
-    // deixa uma preventiva antiga atrasada para demonstrar o alerta
-    if (!passado || (os.dataAgendada?.slice(0, 7) === dateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7) && os.unidadeId === planta.id)) continue;
-    const inicio = new Date(ag);
-    const fim = new Date(ag.getTime() + (3 + rnd() * 4) * 3600_000);
-    os.status = 'concluida';
-    os.inicio = localDateTimeStr(inicio);
-    os.fim = localDateTimeStr(fim);
-    os.apontamentos = [{ profissionalId: tec1.id, inicio: os.inicio, fim: os.fim }, { profissionalId: ajud.id, inicio: os.inicio, fim: os.fim }];
-    os.servicoExecutado = 'Executadas as atividades programadas do PMOC conforme checklist. Equipamentos operando dentro dos parâmetros.';
-    os.nomeAssinante = 'Ana Souza';
-    for (const item of os.equipamentos) {
-      const eq = eqMap.get(item.equipamentoId)!;
-      item.concluido = true;
-      for (const c of item.checklist) {
-        c.resultado = rnd() > 0.93 ? 'corrigido' : 'ok';
-        if (c.tipo === 'medicao') {
-          if (c.unidade === 'V') c.valor = String(Math.round(214 + rnd() * 12));
-          else if (c.unidade === 'A') c.valor = String(Math.round((eq.correnteNominal || 5) * (0.75 + rnd() * 0.3) * 10) / 10);
-          else if (c.unidade === '°C') c.valor = String(Math.round((c.min ?? 12) + rnd() * 3));
-          else if (c.unidade === 'K') c.valor = String(Math.round((c.min ?? 8) + 1 + rnd() * 3));
-          else c.valor = String(Math.round(100 + rnd() * 30));
-        }
-      }
-      item.medicoes = {
-        tensao: String(Math.round(214 + rnd() * 12)),
-        corrente: String(Math.round((eq.correnteNominal || 5) * (0.75 + rnd() * 0.3) * 10) / 10),
-        tRetorno: String(Math.round((23 + rnd() * 2) * 10) / 10),
-        tInsuflamento: String(Math.round((12 + rnd() * 3) * 10) / 10),
-      };
+  const mesPassado = dateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7);
+  for (let k = -6; k <= 0; k++) {
+    const de = dateStr(new Date(now.getFullYear(), now.getMonth() + k, 1));
+    const ate = dateStr(new Date(now.getFullYear(), now.getMonth() + k + 1, 0));
+    const r = await gerarPreventivas({ unidadeIds: [sede.id, planta.id], de, ate, agrupamento: 'equipamento', responsavelId: tec1.id, tecnicosIds: [tec1.id, ajud.id] });
+    const abertura = new Date(de + 'T07:30:00');
+    abertura.setDate(abertura.getDate() - 3);
+    for (const os of r.criadas) {
+      os.dataAbertura = abertura.toISOString();
+      os.historico = [{ data: os.dataAbertura, texto: 'OS gerada automaticamente pelas rotinas de manutenção dos equipamentos', usuario: 'Gestor' }];
+      await db.os.put(os);
     }
-    os.historico.push({ data: os.fim, texto: 'OS concluída' });
-    updates.push(os);
+    for (const os of r.criadas) {
+      // deixa a preventiva do mês passado da planta em aberto para demonstrar atraso e rotinas vencidas
+      if (os.unidadeId === planta.id && de.slice(0, 7) === mesPassado) continue;
+      // mês corrente: só parte da sede já foi executada
+      if (k === 0 && (os.unidadeId === planta.id || (os.dataAgendada || de) > addDays(hoje, -3) || rnd() > 0.75)) continue;
+      const eq = eqMap.get(os.equipamentos[0].equipamentoId)!;
+      const base = new Date((os.dataAgendada || de) + 'T08:00:00');
+      base.setDate(base.getDate() + Math.floor(rnd() * 3));
+      const inicio = new Date(base.getTime() + Math.floor(rnd() * 6) * 3600_000);
+      const fim = new Date(inicio.getTime() + (0.8 + rnd() * 1.6) * 3600_000);
+      const executor = rnd() > 0.35 ? tec1.id : tec2.id;
+      os.status = k < -1 || (k === -1 && rnd() > 0.3) ? 'validada' : 'concluida';
+      os.inicio = localDateTimeStr(inicio);
+      os.fim = localDateTimeStr(fim);
+      os.apontamentos = [{ profissionalId: executor, inicio: os.inicio, fim: os.fim }, { profissionalId: ajud.id, inicio: os.inicio, fim: os.fim }];
+      os.servicoExecutado = 'Executadas as rotinas programadas do plano de manutenção do equipamento. Equipamento operando dentro dos parâmetros.';
+      os.nomeAssinante = 'Ana Souza';
+      if (os.status === 'validada') {
+        os.supervisorId = rt.id;
+        os.liberacao = localDateTimeStr(new Date(fim.getTime() + 20 * 3600_000));
+      }
+      for (const item of os.equipamentos) {
+        item.concluido = true;
+        for (const c of item.checklist) {
+          const naoExec = rnd() > 0.97;
+          c.execucao = naoExec ? 'N' : 'E';
+          c.executorId = executor;
+          c.dataExecucao = os.fim;
+          c.tempoRealMin = c.tempoPrevistoMin ? Math.max(2, Math.round(c.tempoPrevistoMin * (0.7 + rnd() * 0.6))) : undefined;
+          c.resultado = naoExec ? '' : rnd() > 0.93 ? 'corrigido' : 'ok';
+          if (naoExec) c.obs = 'Ambiente ocupado — cliente não liberou a intervenção';
+          if (c.tipo === 'medicao' && !naoExec) {
+            if (c.unidade === 'V') c.valor = String(Math.round(214 + rnd() * 12));
+            else if (c.unidade === 'A') c.valor = String(Math.round((eq.correnteNominal || 5) * (0.75 + rnd() * 0.3) * 10) / 10);
+            else if (c.unidade === '°C') c.valor = String(Math.round((c.min ?? 12) + rnd() * 3));
+            else if (c.unidade === 'K') c.valor = String(Math.round((c.min ?? 8) + 1 + rnd() * 3));
+            else c.valor = String(Math.round(100 + rnd() * 30));
+          }
+        }
+        item.medicoes = {
+          tensao: String(Math.round(214 + rnd() * 12)),
+          corrente: String(Math.round((eq.correnteNominal || 5) * (0.75 + rnd() * 0.3) * 10) / 10),
+          tRetorno: String(Math.round((23 + rnd() * 2) * 10) / 10),
+          tInsuflamento: String(Math.round((12 + rnd() * 3) * 10) / 10),
+        };
+      }
+      os.historico.push({ data: os.fim, texto: 'Execução concluída', usuario: profs.find((p) => p.id === executor)?.nome });
+      if (os.liberacao) os.historico.push({ data: os.liberacao, texto: 'OS liberada pelo supervisor', usuario: rt.nome });
+      await db.os.put(os);
+      await registrarExecucoesDaOS(os);
+    }
   }
-  await db.os.bulkPut(updates);
 
   // ---------- Corretivas / ocorrências ----------
   const equipCopa = equipamentos[11];

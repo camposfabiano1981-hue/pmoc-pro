@@ -2,7 +2,8 @@ import { db, nextNumber, nowIso, uid } from '../db/db';
 import { planoSugerido } from '../db/planosPadrao';
 import type { Ambiente, Equipamento, Unidade } from '../db/types';
 import { exportXlsx, readXlsx, type Cell } from './excel';
-import { norm, parseNum } from './format';
+import { norm, parseNum, todayStr } from './format';
+import { aplicarPlano } from './rotinas';
 
 export type TipoAba = 'equipamentos' | 'ambientes' | 'ignorar';
 
@@ -199,6 +200,11 @@ export async function importarAbas(abas: AbaDetectada[], clienteId: string, unid
     if (novasU.length) await db.unidades.bulkAdd(novasU);
     if (novosA.length) await db.ambientes.bulkAdd(novosA);
     if (novosE.length) await db.equipamentos.bulkAdd(novosE);
+  });
+  // rotinas de manutenção (periodicidade por equipamento) a partir do plano sugerido
+  const hoje = todayStr();
+  await db.transaction('rw', db.equipamentos, db.rotinas, db.planos, async () => {
+    for (const e of novosE) await aplicarPlano(e.id, hoje);
   });
   return res;
 }

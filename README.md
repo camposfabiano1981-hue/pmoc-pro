@@ -15,11 +15,14 @@ gratuitamente pelo **GitHub Pages**, sem servidor nem banco de dados para contra
 | Módulo | Recursos |
 |---|---|
 | **Painel** | OS em aberto/atrasadas, cumprimento do PMOC, MTTR, SLA, disponibilidade, capacidade instalada (TR), gráficos mensais e central de alertas |
-| **Ordens de serviço** | Lista e quadro Kanban (arrastar e soltar), filtros, tipos (preventiva, corretiva, emergencial, higienização, instalação…), prioridade com **SLA do contrato**, equipe, checklist por equipamento (OK / Corrigido / NOK / N/A), **medições de campo com diagnóstico automático** (ΔT, superaquecimento e sub-resfriamento por tabela P×T de 10 fluidos), peças com **baixa automática no estoque**, serviços, apontamento de horas, laudo, fotos (câmera do celular), **assinatura digital** do técnico e do cliente, avaliação, histórico, salvamento automático e impressão/PDF com QR Code |
+| **Periodicidade por equipamento** | Cada equipamento tem suas **rotinas** (atividade × periodicidade em dias) com **última execução** e **próxima execução**: a próxima é recalculada a partir da última execução lançada pela equipe técnica. Ajuste fino por equipamento (intervalo, tempo, setor, responsável, reprogramação de data), histórico de execuções e status (em dia / a vencer / vencida) |
+| **Área do técnico** | Tela para celular: OS do técnico (em execução, atrasadas, hoje, próximos dias), check-in, lançamento de cada tarefa como **E** (executado), **P** (pendente) ou **N** (não executado, com motivo), tempo real, material, medições, fotos, materiais do estoque e assinaturas. Cada lançamento fica registrado com o executante e a data/hora |
+| **Perfis de acesso** | Técnico (lança execuções), Supervisor (libera as OS) e Gestor (acesso total), com PIN opcional e troca rápida de usuário |
+| **Ordens de serviço** | Formulário completo (informações gerais, padrões de execução, identificação do ambiente, proprietário e responsável técnico, tarefas E/P/N com tempo previsto × real e material, executantes, parada e interferência, alteração de localização, assinaturas do executante, responsável e supervisor, data/hora de liberação). Impressão preenchida ou **formulário em branco** para campo. Lista e quadro Kanban (arrastar e soltar), filtros, tipos (preventiva, corretiva, emergencial, higienização, instalação…), prioridade com **SLA do contrato**, equipe, checklist por equipamento (OK / Corrigido / NOK / N/A), **medições de campo com diagnóstico automático** (ΔT, superaquecimento e sub-resfriamento por tabela P×T de 10 fluidos), peças com **baixa automática no estoque**, serviços, apontamento de horas, laudo, fotos (câmera do celular), **assinatura digital** do técnico e do cliente, avaliação, histórico, salvamento automático e impressão/PDF com QR Code |
 | **Ocorrências / chamados** | Quebra, processo, anomalia simples/crítica, chamado, vazamento — conversão em OS com um clique |
 | **Orçamentos** | Itens de serviços e peças, desconto, deslocamento, validade, impressão e conversão em OS |
-| **Documento PMOC** | Capa, identificação da edificação, proprietário e responsável técnico (ART/TRT/RRT), relação de ambientes com renovação de ar mínima, relação de equipamentos, plano de atividades × meses, registro de execução, qualidade do ar, recomendações de emergência, normas e termo de responsabilidade |
-| **Cronograma anual** | Matriz equipamento × mês (programado, executado, atrasado) e **geração automática das OS preventivas** do mês — por unidade, ambiente ou equipamento, sem duplicar |
+| **Documento PMOC** | Capa, identificação da edificação, proprietário e responsável técnico (ART/TRT/RRT), relação de ambientes com renovação de ar mínima, relação de equipamentos, **plano de manutenção por equipamento** (periodicidade, última e próxima execução e meses previstos/executados), registro de execução por equipamento, qualidade do ar, recomendações de emergência, normas e termo de responsabilidade |
+| **Cronograma por equipamento** | **Previsão diária** (dias 1–31, como o cronograma de manutenção periódica) e **visão anual**, rotina a rotina, com previsto, programado (OS gerada), reprogramado, executado, não executado e vencido; clique em um dia para reprogramar. **Geração automática das OS preventivas** (uma por equipamento, por ambiente ou por unidade), sem duplicar rotinas já programadas |
 | **Planos de manutenção** | 8 planos prontos e editáveis: Portaria 3.523 (Anexo I completo), Split/Janela, VRF/VRV, Chiller, Fan Coil/Self/AHU, Torre de resfriamento, Câmara fria/refrigeração comercial, Exaustão. Periodicidades diária a anual, tempo padrão e faixas de medição |
 | **Qualidade do ar** | Laudos da RE 09/2003 (fungos, relação I/E, CO₂, aerodispersóides, temperatura, umidade, velocidade, renovação) com avaliação automática e alerta de vencimento semestral |
 | **Fluidos refrigerantes** | Cargas, recolhimentos, vazamentos e testes de estanqueidade por equipamento, com **tCO₂e** (GWP) |
@@ -58,6 +61,15 @@ npm run build      # gera a pasta dist/ para publicação
 ```
 
 ---
+
+## Fluxo de trabalho recomendado
+
+1. **Gestor** cadastra unidades, ambientes e equipamentos (ou importa a planilha) e escolhe o plano modelo de cada equipamento — as rotinas são criadas automaticamente e podem ser ajustadas na ficha do equipamento.
+2. No **Cronograma por equipamento**, o gestor gera as OS preventivas do período (uma por equipamento).
+3. O **técnico** entra com seu usuário, abre a **Área do técnico** no celular, faz o check-in e lança cada tarefa (E/P/N), medições, fotos e materiais; colhe a assinatura do cliente e finaliza.
+4. O **supervisor** confere e **libera** a OS. A última execução de cada rotina é atualizada e a próxima data é recalculada pela periodicidade daquele equipamento.
+
+> Perfis e PIN são um controle de acesso local do navegador (cada aparelho), adequado para organizar quem lança o quê; não substituem autenticação em servidor.
 
 ## Onde ficam os dados
 

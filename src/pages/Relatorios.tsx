@@ -17,6 +17,7 @@ export default function Relatorios() {
   const l = useLookups();
   const osAll = useLiveQuery(() => db.os.toArray(), []) || [];
   const fluidos = useLiveQuery(() => db.fluidos.toArray(), []) || [];
+  const execucoes = useLiveQuery(() => db.execucoes.toArray(), []) || [];
   const [de, setDe] = useState(addDays(todayStr(), -365));
   const [ate, setAte] = useState(todayStr());
   const [unidade, setUnidade] = useState('');
@@ -38,8 +39,9 @@ export default function Relatorios() {
       const minhas = os.filter((o) => o.responsavelId === p.id || o.tecnicosIds.includes(p.id));
       const h = minhas.reduce((a, o) => a + o.apontamentos.filter((x) => x.profissionalId === p.id).reduce((s, x) => s + Math.max(0, diffHours(x.fim || x.inicio, x.inicio) || 0), 0), 0);
       const aval = minhas.filter((o) => o.avaliacao);
-      return { p, os: minhas.length, concl: minhas.filter((o) => o.status === 'concluida' || o.status === 'validada').length, horas: h, custo: h * (p.valorHora || 0), aval: aval.length ? aval.reduce((a, o) => a + (o.avaliacao || 0), 0) / aval.length : null };
-    }).filter((x) => x.os > 0);
+      const ex = execucoes.filter((e) => e.executorId === p.id && e.data >= de && e.data <= ate);
+      return { p, os: minhas.length, concl: minhas.filter((o) => o.status === 'concluida' || o.status === 'validada').length, horas: h, custo: h * (p.valorHora || 0), aval: aval.length ? aval.reduce((a, o) => a + (o.avaliacao || 0), 0) / aval.length : null, tarefasE: ex.filter((e) => e.status === 'E').length, tarefasN: ex.filter((e) => e.status === 'N').length };
+    }).filter((x) => x.os > 0 || x.tarefasE > 0);
 
     // por equipamento
     const eqStats = l.equipamentos
@@ -83,13 +85,13 @@ export default function Relatorios() {
       if (f.operacao === 'recolhimento') porFluido[f.fluido].rec += f.quantidadeKg;
     }
     return { os, concl, prev, corr, fat, custoPecas, horas, tec, eqStats, uni, pecas: Object.values(pecas).sort((a, b) => b.valor - a.valor), porFluido };
-  }, [osAll, fluidos, de, ate, unidade, l]);
+  }, [osAll, fluidos, execucoes, de, ate, unidade, l]);
 
   const exportar = () =>
     exportXlsx(
       [
         { name: 'Resumo', headers: ['Indicador', 'Valor'], rows: [['Período', `${de} a ${ate}`], ['OS no período', r.os.length], ['OS concluídas', r.concl.length], ['Preventivas concluídas', r.prev.length], ['Corretivas', r.corr.length], ['Horas trabalhadas', Math.round(r.horas * 10) / 10], ['Faturamento (R$)', r.fat], ['Custo de peças (R$)', r.custoPecas]] },
-        { name: 'Técnicos', headers: ['Técnico', 'OS', 'Concluídas', 'Horas', 'Custo MO (R$)', 'Avaliação média'], rows: r.tec.map((t) => [t.p.nome, t.os, t.concl, Math.round(t.horas * 10) / 10, t.custo, t.aval ? Math.round(t.aval * 10) / 10 : null]) },
+        { name: 'Técnicos', headers: ['Técnico', 'OS', 'Concluídas', 'Tarefas executadas (E)', 'Não executadas (N)', 'Horas', 'Custo MO (R$)', 'Avaliação média'], rows: r.tec.map((t) => [t.p.nome, t.os, t.concl, t.tarefasE, t.tarefasN, Math.round(t.horas * 10) / 10, t.custo, t.aval ? Math.round(t.aval * 10) / 10 : null]) },
         { name: 'Equipamentos', headers: ['TAG', 'Tipo', 'Unidade', 'Ambiente', 'OS', 'Corretivas', 'MTBF (dias)', 'Itens NOK', 'Custo (R$)'], rows: r.eqStats.map((x) => [x.e.tag, x.e.tipo, l.unidadeMap.get(x.e.unidadeId)?.nome, l.ambienteMap.get(x.e.ambienteId || '')?.nome, x.total, x.corretivas, x.mtbf !== null ? Math.round(x.mtbf) : null, x.nok, Math.round(x.custo * 100) / 100]) },
         { name: 'Unidades', headers: ['Unidade', 'Equipamentos', 'OS concluídas', 'Preventivas', 'Faturamento (R$)'], rows: r.uni.map((x) => [x.u.nome, x.equip, x.os, x.prev, x.total]) },
         { name: 'Peças consumidas', headers: ['Peça', 'Quantidade', 'Unidade', 'Custo (R$)'], rows: r.pecas.map((p) => [p.desc, p.qtd, p.un, p.valor]) },
@@ -141,10 +143,10 @@ export default function Relatorios() {
         <Card title="Produtividade da equipe" bodyClass="p-0">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/60"><tr><th className={th}>Técnico</th><th className={th}>OS</th><th className={th}>Concluídas</th><th className={th}>Horas</th><th className={th}>Custo MO</th><th className={th}>Avaliação</th></tr></thead>
+              <thead className="bg-slate-50 dark:bg-slate-800/60"><tr><th className={th}>Técnico</th><th className={th}>OS</th><th className={th}>Concluídas</th><th className={th}>Tarefas E / N</th><th className={th}>Horas</th><th className={th}>Custo MO</th><th className={th}>Avaliação</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {r.tec.map((t) => (
-                  <tr key={t.p.id}><td className={td}>{t.p.nome}</td><td className={td}>{t.os}</td><td className={td}>{t.concl}</td><td className={td}>{fmtHoras(t.horas)}</td><td className={td}>{money(t.custo)}</td><td className={td}>{t.aval ? `${n2(t.aval)} ★` : '—'}</td></tr>
+                  <tr key={t.p.id}><td className={td}>{t.p.nome}</td><td className={td}>{t.os}</td><td className={td}>{t.concl}</td><td className={td}>{t.tarefasE} / {t.tarefasN}</td><td className={td}>{fmtHoras(t.horas)}</td><td className={td}>{money(t.custo)}</td><td className={td}>{t.aval ? `${n2(t.aval)} ★` : '—'}</td></tr>
                 ))}
               </tbody>
             </table>

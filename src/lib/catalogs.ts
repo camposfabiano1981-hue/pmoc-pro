@@ -55,18 +55,34 @@ export const FLUIDOS: { nome: string; gwp: number; odp: number; obs?: string }[]
 
 export const gwpDe = (fluido?: string) => FLUIDOS.find((f) => f.nome === fluido)?.gwp ?? 0;
 
-export const PERIODICIDADES: { value: Periodicidade; label: string; sigla: string; meses: number; vezesMes: number }[] = [
-  { value: 'diaria', label: 'Diária', sigla: 'D', meses: 0, vezesMes: 22 },
-  { value: 'semanal', label: 'Semanal', sigla: 'S', meses: 0, vezesMes: 4 },
-  { value: 'quinzenal', label: 'Quinzenal', sigla: 'Q', meses: 0, vezesMes: 2 },
-  { value: 'mensal', label: 'Mensal', sigla: 'M', meses: 1, vezesMes: 1 },
-  { value: 'bimestral', label: 'Bimestral', sigla: 'B', meses: 2, vezesMes: 1 },
-  { value: 'trimestral', label: 'Trimestral', sigla: 'T', meses: 3, vezesMes: 1 },
-  { value: 'quadrimestral', label: 'Quadrimestral', sigla: 'QD', meses: 4, vezesMes: 1 },
-  { value: 'semestral', label: 'Semestral', sigla: 'SE', meses: 6, vezesMes: 1 },
-  { value: 'anual', label: 'Anual', sigla: 'A', meses: 12, vezesMes: 1 },
-  { value: 'na', label: 'Não se aplica', sigla: 'N/A', meses: -1, vezesMes: 0 },
+export const PERIODICIDADES: { value: Periodicidade; label: string; sigla: string; meses: number; vezesMes: number; dias: number }[] = [
+  { value: 'diaria', label: 'Diária', sigla: 'D', meses: 0, vezesMes: 22, dias: 1 },
+  { value: 'semanal', label: 'Semanal', sigla: 'S', meses: 0, vezesMes: 4, dias: 7 },
+  { value: 'quinzenal', label: 'Quinzenal', sigla: 'Q', meses: 0, vezesMes: 2, dias: 15 },
+  { value: 'mensal', label: 'Mensal', sigla: 'M', meses: 1, vezesMes: 1, dias: 30 },
+  { value: 'bimestral', label: 'Bimestral', sigla: 'B', meses: 2, vezesMes: 1, dias: 60 },
+  { value: 'trimestral', label: 'Trimestral', sigla: 'T', meses: 3, vezesMes: 1, dias: 90 },
+  { value: 'quadrimestral', label: 'Quadrimestral', sigla: 'QD', meses: 4, vezesMes: 1, dias: 120 },
+  { value: 'semestral', label: 'Semestral', sigla: 'SE', meses: 6, vezesMes: 1, dias: 180 },
+  { value: 'anual', label: 'Anual', sigla: 'A', meses: 12, vezesMes: 1, dias: 365 },
+  { value: 'na', label: 'Não se aplica', sigla: 'N/A', meses: -1, vezesMes: 0, dias: 0 },
 ];
+
+export const diasDaPeriodicidade = (p?: Periodicidade) => PERIODICIDADES.find((x) => x.value === p)?.dias ?? 30;
+
+export const SETORES = ['Manutenção', 'Equipe PMOC com ART', 'Refrigeração', 'Elétrica', 'Higienização', 'Terceirizado'];
+
+export const PERFIS = [
+  { value: 'tecnico', label: 'Técnico (lança execuções)' },
+  { value: 'supervisor', label: 'Supervisor (libera OS)' },
+  { value: 'gestor', label: 'Gestor (acesso total)' },
+];
+
+export const STATUS_EXECUCAO = [
+  { value: 'E', label: 'Executado', cls: 'bg-emerald-600 text-white border-emerald-600' },
+  { value: 'P', label: 'Pendente', cls: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'N', label: 'Não executado', cls: 'bg-rose-600 text-white border-rose-600' },
+] as const;
 
 export const periodicidadeLabel = (p?: Periodicidade) => PERIODICIDADES.find((x) => x.value === p)?.label ?? '—';
 export const periodicidadeSigla = (p?: Periodicidade) => PERIODICIDADES.find((x) => x.value === p)?.sigla ?? '';
@@ -90,8 +106,8 @@ export const STATUS_OS: { value: StatusOS; label: string; cor: string }[] = [
   { value: 'em_execucao', label: 'Em execução', cor: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' },
   { value: 'pausada', label: 'Pausada', cor: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
   { value: 'aguardando_peca', label: 'Aguardando peça', cor: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200' },
-  { value: 'concluida', label: 'Concluída', cor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200' },
-  { value: 'validada', label: 'Validada', cor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200' },
+  { value: 'concluida', label: 'Concluída — aguard. liberação', cor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200' },
+  { value: 'validada', label: 'Liberada', cor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200' },
   { value: 'cancelada', label: 'Cancelada', cor: 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200' },
 ];
 export const statusOs = (s: StatusOS) => STATUS_OS.find((x) => x.value === s) ?? STATUS_OS[0];

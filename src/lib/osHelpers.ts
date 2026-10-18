@@ -2,6 +2,7 @@ import { db, movimentarEstoque, nextNumber, nowIso, uid } from '../db/db';
 import type { Contrato, OS, Prioridade } from '../db/types';
 import { OS_FINALIZADAS, PRIORIDADES } from './catalogs';
 import { addHours, dateStr, diffHours, localDateTimeStr, todayStr } from './format';
+import { estornarExecucoesDaOS, registrarExecucoesDaOS, statusItem } from './rotinas';
 
 export function prazoSla(prioridade: Prioridade, contrato?: Contrato, base = new Date()): string {
   const h =
@@ -56,6 +57,18 @@ export function horasTrabalhadas(os: OS): number {
   }, 0);
 }
 
+/** Tempo previsto da OS (min): informado ou soma do tempo previsto das tarefas. */
+export function tempoPrevisto(os: OS): number {
+  if (os.tempoPrevistoMin) return os.tempoPrevistoMin;
+  return os.equipamentos.reduce((a, e) => a + e.checklist.reduce((s, c) => s + (c.tempoPrevistoMin || 0), 0), 0);
+}
+
+export function contagemTarefas(os: OS) {
+  const all = os.equipamentos.flatMap((e) => e.checklist);
+  const st = all.map(statusItem);
+  return { total: all.length, E: st.filter((x) => x === 'E').length, P: st.filter((x) => x === 'P').length, N: st.filter((x) => x === 'N').length, vazias: st.filter((x) => !x).length };
+}
+
 /** Dá baixa no estoque das peças da OS ainda não baixadas. */
 export async function baixarPecas(os: OS): Promise<OS> {
   const pecas = [...os.pecas];
@@ -66,6 +79,61 @@ export async function baixarPecas(os: OS): Promise<OS> {
     pecas[i] = { ...p, baixado: true };
   }
   return { ...os, pecas };
+}
+
+export function comHistorico(os: OS, texto: string, usuario?: string): OS {
+  return { ...os, historico: [...os.historico, { data: nowIso(), texto, usuario }] };
+}
+
+/**
+ * Conclusão da execução: fecha apontamentos, baixa estoque (opcional), aplica alteração
+ * de localização, encerra a ocorrência de origem e grava as execuções no histórico de
+ * cada equipamento (atualizando última/próxima execução das rotinas).
+ */
+export async function concluirOS(os: OS, opts: { baixarEstoque: boolean; usuario?: string }): Promise<OS> {
+  const agora = localDateTimeStr();
+  let o: OS = {
+    ...os,
+    status: 'concluida',
+    fim: os.fim || agora,
+    apontamentos: os.apontamentos.map((a) => (a.fim ? a : { ...a, fim: agora })),
+    equipamentos: os.equipamentos.map((e) => ({ ...e, concluido: true })),
+  };
+  if (opts.baixarEstoque) o = await baixarPecas(o);
+  for (const item of o.equipamentos) {
+    if (!item.novoAmbienteId) continue;
+    const eq = await db.equipamentos.get(item.equipamentoId);
+    if (eq && eq.ambienteId !== item.novoAmbienteId) {
+      await db.equipamentos.update(eq.id, { ambienteId: item.novoAmbienteId, updatedAt: nowIso() });
+      o = comHistorico(o, `Localização de ${eq.tag} alterada`, opts.usuario);
+    }
+  }
+  if (o.ocorrenciaId) await db.ocorrencias.update(o.ocorrenciaId, { status: 'encerrada', updatedAt: nowIso() });
+  o = comHistorico(o, 'Execução concluída — aguardando liberação', opts.usuario);
+  await db.os.put({ ...o, updatedAt: nowIso() });
+  await registrarExecucoesDaOS(o);
+  return o;
+}
+
+/** Liberação pelo supervisor (data/hora de liberação). */
+export async function liberarOS(os: OS, supervisorId: string | undefined, usuario?: string): Promise<OS> {
+  const o = comHistorico({ ...os, status: 'validada', supervisorId: supervisorId || os.supervisorId, liberacao: localDateTimeStr() }, 'OS liberada pelo supervisor', usuario);
+  await db.os.put({ ...o, updatedAt: nowIso() });
+  await registrarExecucoesDaOS(o);
+  return o;
+}
+
+/** Reabre uma OS concluída/liberada/cancelada e estorna as execuções do histórico. */
+export async function reabrirOS(os: OS, usuario?: string): Promise<OS> {
+  const o = comHistorico({ ...os, status: 'em_execucao', liberacao: undefined }, 'OS reaberta', usuario);
+  await db.os.put({ ...o, updatedAt: nowIso() });
+  await estornarExecucoesDaOS(o.id);
+  return o;
+}
+
+export async function excluirOS(id: string): Promise<void> {
+  await estornarExecucoesDaOS(id);
+  await db.os.delete(id);
 }
 
 export const MEDICOES_CAMPOS: { key: keyof OS['equipamentos'][number]['medicoes']; label: string; unidade: string }[] = [
@@ -80,3 +148,4 @@ export const MEDICOES_CAMPOS: { key: keyof OS['equipamentos'][number]['medicoes'
   { key: 'pDescarga', label: 'P. descarga', unidade: 'psig' },
   { key: 'tLinhaLiquido', label: 'T. linha líquido', unidade: '°C' },
 ];
+

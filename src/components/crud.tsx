@@ -7,6 +7,7 @@ import type { Base } from '../db/types';
 import { useLookups, type Lookups } from '../lib/lookups';
 import { maskCpfCnpj, norm, todayStr, validaDoc } from '../lib/format';
 import { exportCsv, exportXlsx } from '../lib/excel';
+import { useSessao, type Perfil } from '../lib/sessao';
 import { Button, Card, EmptyState, Field, IconButton, Input, Modal, PageHeader, Select, Textarea, cx, useConfirm, useToast } from './ui';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -78,6 +79,10 @@ export interface EntityConfig {
   sort?: { key: string; dir: 'asc' | 'desc' };
   beforeDelete?: (row: AnyRec) => Promise<string | null>;
   beforeSave?: (form: AnyRec, l: Lookups) => AnyRec | Promise<AnyRec>;
+  /** Executado após salvar (ex.: aplicar plano nas rotinas do equipamento) */
+  afterSave?: (rec: AnyRec, anterior: AnyRec | null) => Promise<string | void>;
+  /** Perfis que apenas consultam (sem incluir/editar/excluir) */
+  somenteLeituraPara?: Perfil[];
   formSize?: 'md' | 'lg' | 'xl';
 }
 
@@ -238,7 +243,8 @@ export function EntityFormModal({ cfg, initial, open, onClose, onSaved }: { cfg:
       if (cfg.numbering && !data[cfg.numbering.field]) data[cfg.numbering.field] = await nextNumber(cfg.numbering.kind);
       if (cfg.beforeSave) data = await cfg.beforeSave(data, lookups);
       const rec = await saveRecord(cfg.table, data as Partial<Base>);
-      toast(`${cfg.singular} salvo(a) com sucesso.`);
+      const extra = await cfg.afterSave?.(rec as AnyRec, initial?.id ? initial : null);
+      toast(`${cfg.singular} salvo(a) com sucesso.${extra ? ' ' + extra : ''}`);
       onSaved?.(rec as AnyRec);
       onClose();
     } catch (e) {
@@ -297,6 +303,9 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
   const [pageSize, setPageSize] = useState(50);
   const [editing, setEditing] = useState<AnyRec | null>(null);
   const [open, setOpen] = useState(false);
+  const { usuario, pode } = useSessao();
+  const leitura = !!cfg.somenteLeituraPara?.includes(usuario.perfil);
+  const podeExcluir = pode('excluir');
 
   useEffect(() => {
     if (params.get('novo') === '1') {
@@ -373,6 +382,7 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
 
   const openRow = (r: AnyRec) => {
     if (cfg.detailPath) navigate(cfg.detailPath(r));
+    else if (leitura) return;
     else {
       setEditing(r);
       setOpen(true);
@@ -394,15 +404,17 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
             <Button variant="outline" icon={<FileSpreadsheet size={16} />} onClick={() => doExport('xlsx')}>
               Excel
             </Button>
-            <Button
-              icon={<Plus size={16} />}
-              onClick={() => {
-                setEditing(null);
-                setOpen(true);
-              }}
-            >
-              Novo
-            </Button>
+            {!leitura && (
+              <Button
+                icon={<Plus size={16} />}
+                onClick={() => {
+                  setEditing(null);
+                  setOpen(true);
+                }}
+              >
+                Novo
+              </Button>
+            )}
           </>
         }
       />
@@ -466,21 +478,27 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
                     <td className="whitespace-nowrap px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center">
                         {cfg.rowActions?.(r, lookups)}
-                        <IconButton
-                          title="Editar"
-                          onClick={() => {
-                            setEditing(r);
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil size={15} />
-                        </IconButton>
-                        <IconButton title="Duplicar" onClick={() => duplicate(r)}>
-                          <Copy size={15} />
-                        </IconButton>
-                        <IconButton title="Excluir" className="hover:text-rose-600" onClick={() => remove(r)}>
-                          <Trash2 size={15} />
-                        </IconButton>
+                        {!leitura && (
+                          <>
+                            <IconButton
+                              title="Editar"
+                              onClick={() => {
+                                setEditing(r);
+                                setOpen(true);
+                              }}
+                            >
+                              <Pencil size={15} />
+                            </IconButton>
+                            <IconButton title="Duplicar" onClick={() => duplicate(r)}>
+                              <Copy size={15} />
+                            </IconButton>
+                          </>
+                        )}
+                        {!leitura && podeExcluir && (
+                          <IconButton title="Excluir" className="hover:text-rose-600" onClick={() => remove(r)}>
+                            <Trash2 size={15} />
+                          </IconButton>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -1,17 +1,16 @@
-import { useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, CalendarRange, FileText, Printer, Wand2 } from 'lucide-react';
+import { ArrowLeft, CalendarRange, FileText, Printer } from 'lucide-react';
 import type { EntityConfig } from '../components/crud';
-import { Badge, Button, Card, Field, IconButton, Input, Modal, PageHeader, Select, cx, useToast } from '../components/ui';
+import { Badge, Button, IconButton, Select, cx } from '../components/ui';
 import { PrintPage, PrintToolbar, QRImage, appUrl } from '../components/widgets';
 import { db } from '../db/db';
-import type { Pmoc } from '../db/types';
+import type { Pmoc, Rotina } from '../db/types';
 import { NORMAS, RECOMENDACOES_PADRAO, RE09, TERMO_RT, periodicidadeLabel, statusOs } from '../lib/catalogs';
-import { MESES, MESES_CURTOS, btuToTr, fmtBtu, fmtDate, n2, todayStr } from '../lib/format';
+import { MESES_CURTOS, btuToTr, dateStr, fmtBtu, fmtDate, n2, todayStr } from '../lib/format';
 import { useLookups } from '../lib/lookups';
-import { gerarPreventivas, type Agrupamento } from '../lib/preventivas';
-import { isDue, monthIndex, monthIndexFromStr, situacaoMes, type SituacaoMes } from '../lib/schedule';
+import { projetar } from '../lib/rotinas';
 import { avaliarAnalise, vencBadge } from '../modules/entities';
 
 const STATUS_PMOC = [
@@ -79,169 +78,6 @@ export const pmocsCfg: EntityConfig = {
   ),
 };
 
-/* ===================== Cronograma ===================== */
-const SIT: Record<SituacaoMes, { cls: string; label: string; sym: string }> = {
-  nao_programado: { cls: '', label: 'Sem atividade', sym: '' },
-  programado: { cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200', label: 'Programado', sym: 'P' },
-  em_andamento: { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200', label: 'Em execução', sym: 'E' },
-  executado: { cls: 'bg-emerald-500 text-white', label: 'Executado', sym: '✓' },
-  atrasado: { cls: 'bg-rose-500 text-white', label: 'Atrasado / não executado', sym: '!' },
-};
-
-export function Cronograma() {
-  const l = useLookups();
-  const toast = useToast();
-  const [params] = useSearchParams();
-  const [pmocId, setPmocId] = useState(params.get('pmoc') || '');
-  const [ano, setAno] = useState(new Date().getFullYear());
-  const [gen, setGen] = useState(false);
-  const hoje = new Date();
-  const [g, setG] = useState({ mes0: hoje.getMonth(), ano: hoje.getFullYear(), agrupamento: 'unidade' as Agrupamento, dia: 10, responsavelId: '', tecnicosIds: [] as string[], todos: false });
-  const [preview, setPreview] = useState<{ n: number; equip: number; ign: number } | null>(null);
-  const osList = useLiveQuery(() => db.os.where('tipo').equals('Preventiva').toArray(), []) || [];
-
-  const pmocsVig = l.pmocs.filter((p) => p.status !== 'cancelado');
-  const pmoc = l.pmocMap.get(pmocId) || pmocsVig[0];
-  const startIdx = monthIndexFromStr(pmoc?.vigenciaInicio) ?? monthIndex(ano, 0);
-  const equips = useMemo(() => (pmoc ? l.equipamentos.filter((e) => e.unidadeId === pmoc.unidadeId && e.status !== 'desativado') : []), [pmoc, l.equipamentos]);
-
-  const matriz = useMemo(
-    () => equips.map((e) => ({ e, meses: Array.from({ length: 12 }, (_, m) => situacaoMes(e.id, l.planoMap.get(e.planoId || ''), ano, m, startIdx, osList)) })),
-    [equips, ano, startIdx, osList, l.planoMap],
-  );
-  const programados = matriz.reduce((a, r) => a + r.meses.filter((s) => s !== 'nao_programado' && s !== 'programado').length, 0);
-  const executados = matriz.reduce((a, r) => a + r.meses.filter((s) => s === 'executado').length, 0);
-  const atrasados = matriz.reduce((a, r) => a + r.meses.filter((s) => s === 'atrasado').length, 0);
-  const cumprimento = programados ? Math.round((executados / programados) * 100) : 100;
-
-  const params2 = () => ({ pmocIds: g.todos ? pmocsVig.filter((p) => p.status === 'vigente').map((p) => p.id) : pmoc ? [pmoc.id] : [], ano: g.ano, mes0: g.mes0, agrupamento: g.agrupamento, dia: g.dia, responsavelId: g.responsavelId || undefined, tecnicosIds: g.tecnicosIds });
-  const simular = async () => {
-    const r = await gerarPreventivas({ ...params2(), dryRun: true });
-    setPreview({ n: r.criadas.length, equip: r.criadas.reduce((a, o) => a + o.equipamentos.length, 0), ign: r.ignoradas });
-  };
-  const gerar = async () => {
-    const r = await gerarPreventivas(params2());
-    toast(`${r.criadas.length} OS preventiva(s) gerada(s)${r.ignoradas ? ` · ${r.ignoradas} já existiam` : ''}.`);
-    setGen(false);
-    setPreview(null);
-  };
-
-  return (
-    <div>
-      <PageHeader
-        title="Cronograma anual do PMOC"
-        subtitle="Programado × executado por equipamento e mês — base para a comprovação do PMOC"
-        icon={<CalendarRange size={20} />}
-        actions={
-          <>
-            {pmoc && <Link to={`/pmoc/${pmoc.id}/documento`}><Button variant="outline" icon={<Printer size={16} />}>Documento PMOC</Button></Link>}
-            <Button icon={<Wand2 size={16} />} onClick={() => { setGen(true); setPreview(null); }} disabled={!pmocsVig.length}>Gerar OS preventivas</Button>
-          </>
-        }
-      />
-      <Card className="mb-4" bodyClass="p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="PMOC / unidade" className="min-w-[260px] flex-1">
-            <Select value={pmoc?.id || ''} onChange={(e) => setPmocId(e.target.value)}>
-              {pmocsVig.map((p) => <option key={p.id} value={p.id}>{p.codigo} — {l.unidadeMap.get(p.unidadeId)?.nome}</option>)}
-            </Select>
-          </Field>
-          <Field label="Ano">
-            <Select value={ano} onChange={(e) => setAno(Number(e.target.value))}>
-              {[ano - 2, ano - 1, ano, ano + 1, ano + 2].map((a) => <option key={a}>{a}</option>)}
-            </Select>
-          </Field>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {Object.entries(SIT).filter(([k]) => k !== 'nao_programado').map(([k, v]) => (
-              <span key={k} className="inline-flex items-center gap-1"><span className={cx('inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold', v.cls)}>{v.sym}</span>{v.label}</span>
-            ))}
-          </div>
-        </div>
-      </Card>
-      {!pmoc ? (
-        <Card><p className="text-sm text-slate-500">Cadastre um PMOC em <Link className="text-brand-700 underline" to="/pmoc">Documentos PMOC</Link> para visualizar o cronograma.</p></Card>
-      ) : (
-        <>
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"><p className="text-xs text-slate-500">Cumprimento (meses vencidos)</p><p className={cx('text-2xl font-bold', cumprimento >= 90 ? 'text-emerald-600' : cumprimento >= 70 ? 'text-amber-600' : 'text-rose-600')}>{cumprimento}%</p></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"><p className="text-xs text-slate-500">Execuções realizadas</p><p className="text-2xl font-bold">{executados}</p></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"><p className="text-xs text-slate-500">Atrasadas</p><p className="text-2xl font-bold text-rose-600">{atrasados}</p></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"><p className="text-xs text-slate-500">Vigência</p><p className="text-sm font-semibold">{fmtDate(pmoc.vigenciaInicio)} a {fmtDate(pmoc.vigenciaFim)}</p></div>
-          </div>
-          <Card bodyClass="p-0">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/60">
-                  <tr>
-                    <th className="sticky left-0 bg-slate-50 px-3 py-2 text-left dark:bg-slate-800">Equipamento</th>
-                    <th className="px-2 py-2 text-left">Ambiente</th>
-                    {MESES_CURTOS.map((m) => <th key={m} className="w-10 px-1 py-2">{m}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {matriz.map(({ e, meses }) => (
-                    <tr key={e.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="sticky left-0 whitespace-nowrap bg-white px-3 py-1.5 dark:bg-slate-900">
-                        <Link to={`/equipamentos/${e.id}`} className="font-mono font-semibold text-brand-700 hover:underline dark:text-brand-300">{e.tag}</Link>
-                        <span className="ml-1 text-slate-500">{e.tipo} {e.capacidadeBtu ? `${e.capacidadeBtu / 1000}k` : ''}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-slate-600 dark:text-slate-300">{l.ambienteMap.get(e.ambienteId || '')?.nome}</td>
-                      {meses.map((s, m) => (
-                        <td key={m} className="px-0.5 py-0.5 text-center">
-                          <span title={`${MESES[m]}: ${SIT[s].label}`} className={cx('inline-flex h-6 w-8 items-center justify-center rounded text-[11px] font-bold', SIT[s].cls)}>{SIT[s].sym}</span>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                  {matriz.length === 0 && <tr><td colSpan={14} className="p-6 text-center text-slate-500">Nenhum equipamento ativo nesta unidade.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </>
-      )}
-
-      <Modal
-        open={gen}
-        onClose={() => setGen(false)}
-        title="Gerar OS preventivas do mês"
-        size="md"
-        footer={
-          <>
-            <Button variant="outline" onClick={simular}>Simular</Button>
-            <Button onClick={gerar}>Gerar OS</Button>
-          </>
-        }
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Mês"><Select value={g.mes0} onChange={(e) => setG({ ...g, mes0: Number(e.target.value) })}>{MESES.map((m, i) => <option key={m} value={i}>{m}</option>)}</Select></Field>
-          <Field label="Ano"><Input type="number" value={g.ano} onChange={(e) => setG({ ...g, ano: Number(e.target.value) })} /></Field>
-          <Field label="Agrupamento" className="col-span-2" help="Uma OS por unidade (com todos os equipamentos), por ambiente ou por equipamento">
-            <Select value={g.agrupamento} onChange={(e) => setG({ ...g, agrupamento: e.target.value as Agrupamento })}>
-              <option value="unidade">Uma OS por unidade</option>
-              <option value="ambiente">Uma OS por ambiente</option>
-              <option value="equipamento">Uma OS por equipamento</option>
-            </Select>
-          </Field>
-          <Field label="Dia agendado"><Input type="number" min={1} max={28} value={g.dia} onChange={(e) => setG({ ...g, dia: Number(e.target.value) })} /></Field>
-          <Field label="Responsável">
-            <Select value={g.responsavelId} onChange={(e) => setG({ ...g, responsavelId: e.target.value, tecnicosIds: e.target.value ? [...new Set([...g.tecnicosIds, e.target.value])] : g.tecnicosIds })}>
-              <option value="">— selecione —</option>
-              {l.profissionais.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </Select>
-          </Field>
-          <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={g.todos} onChange={(e) => setG({ ...g, todos: e.target.checked })} /> Gerar para todos os PMOCs vigentes (senão apenas {pmoc?.codigo})</label>
-          {preview && (
-            <p className="col-span-2 rounded-lg bg-brand-50 p-3 text-sm text-brand-900 dark:bg-brand-950 dark:text-brand-200">
-              Serão criadas <b>{preview.n}</b> OS cobrindo <b>{preview.equip}</b> equipamento(s). {preview.ign > 0 && `${preview.ign} OS já existentes serão ignoradas.`}
-            </p>
-          )}
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
 /* ===================== Documento PMOC (impressão) ===================== */
 function Sec({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
@@ -258,6 +94,8 @@ export function PmocDocumento() {
   const pmoc = useLiveQuery(() => db.pmocs.get(id!), [id]) as Pmoc | undefined;
   const osList = useLiveQuery(() => db.os.toArray(), []) || [];
   const analises = useLiveQuery(() => db.analisesAr.toArray(), []) || [];
+  const rotinas = useLiveQuery(() => db.rotinas.toArray(), []) || [];
+  const execucoes = useLiveQuery(() => db.execucoes.toArray(), []) || [];
   const [ano, setAno] = useState<number | null>(null);
   if (!pmoc) return <p className="text-sm text-slate-500">Carregando…</p>;
 
@@ -268,14 +106,24 @@ export function PmocDocumento() {
   const ambs = l.ambientes.filter((a) => a.unidadeId === pmoc.unidadeId);
   const eqs = l.equipamentos.filter((x) => x.unidadeId === pmoc.unidadeId && x.status !== 'desativado');
   const capTotal = eqs.reduce((a, x) => a + (x.capacidadeBtu || 0), 0);
-  const startIdx = monthIndexFromStr(pmoc.vigenciaInicio) ?? 0;
   const anoDoc = ano ?? Number(pmoc.vigenciaInicio.slice(0, 4));
   const mesIni = Number(pmoc.vigenciaInicio.slice(5, 7)) - 1;
   const meses12 = Array.from({ length: 12 }, (_, k) => {
-    const idx = monthIndex(anoDoc, mesIni) + k;
-    return { idx, ano: Math.floor(idx / 12), m: idx % 12 };
+    const idx = anoDoc * 12 + mesIni + k;
+    const ano = Math.floor(idx / 12);
+    const m = idx % 12;
+    return { idx, ano, m, key: `${ano}-${String(m + 1).padStart(2, '0')}` };
   });
-  const planosUsados = [...new Set(eqs.map((x) => x.planoId).filter(Boolean))].map((pid) => l.planoMap.get(pid!)).filter(Boolean);
+  const cicloDe = dateStr(new Date(meses12[0].ano, meses12[0].m, 1));
+  const cicloAte = dateStr(new Date(meses12[11].ano, meses12[11].m + 1, 0));
+  const hoje = todayStr();
+  const execCiclo = execucoes.filter((e) => e.data >= cicloDe && e.data <= cicloAte);
+  const marcasCiclo = (r: Rotina): Record<string, string> => {
+    const m: Record<string, string> = {};
+    for (const d of projetar(r, cicloDe, cicloAte)) m[d.slice(0, 7)] = d === r.proximaExecucao && d < hoje ? '!' : 'X';
+    for (const e of execCiclo) if (e.rotinaId === r.id) m[e.data.slice(0, 7)] = e.status === 'E' ? 'E' : m[e.data.slice(0, 7)] === 'E' ? 'E' : e.status;
+    return m;
+  };
   const anUnidade = analises.filter((a) => a.unidadeId === pmoc.unidadeId).sort((a, b) => b.data.localeCompare(a.data));
   const prevs = osList.filter((o) => o.pmocId === pmoc.id && o.tipo === 'Preventiva').sort((a, b) => (a.dataAgendada || '').localeCompare(b.dataAgendada || ''));
   const td = 'border border-slate-300 px-1.5 py-0.5';
@@ -403,33 +251,75 @@ export function PmocDocumento() {
           </table>
         </Sec>
 
-        <Sec n="6" title="Plano de manutenção e controle — atividades e periodicidade">
-          {planosUsados.map((p) => (
-            <div key={p!.id} className="mb-4 break-inside-avoid">
-              <p className="mb-1 font-semibold">{p!.nome} <span className="font-normal text-slate-600">— aplicado a {eqs.filter((x) => x.planoId === p!.id).map((x) => x.tag).join(', ')}</span></p>
-              <table className="w-full border-collapse text-[10px]">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className={cx(td, 'text-left')}>Descrição da atividade</th>
-                    <th className={td}>Periodicidade</th>
-                    {meses12.map((mm) => <th key={mm.idx} className={cx(td, 'w-7')}>{MESES_CURTOS[mm.m]}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {p!.atividades.filter((a) => a.periodicidade !== 'na').map((a) => (
-                    <tr key={a.id}>
-                      <td className={td}>{a.descricao}</td>
-                      <td className={cx(td, 'whitespace-nowrap text-center')}>{periodicidadeLabel(a.periodicidade)}</td>
-                      {meses12.map((mm) => <td key={mm.idx} className={cx(td, 'text-center font-bold')}>{isDue(a.periodicidade, mm.idx, startIdx) ? 'X' : ''}</td>)}
+        <Sec n="6" title="Plano de manutenção e controle — por equipamento">
+          <p className="mb-2 text-[10px] text-slate-600">
+            Periodicidade controlada individualmente por equipamento: a próxima execução de cada rotina é calculada a partir da última execução registrada pela equipe técnica.
+            Legenda: <b>X</b> previsto · <b>E</b> executado · <b>N</b> não executado · <b>!</b> vencido.
+          </p>
+          {eqs.map((x) => {
+            const rots = rotinas.filter((r) => r.equipamentoId === x.id && r.ativa).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+            if (!rots.length) return null;
+            return (
+              <div key={x.id} className="mb-4 break-inside-avoid">
+                <p className="mb-0.5 bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold">
+                  {x.tag} — {x.tipo} · {[x.marca, x.modelo].filter(Boolean).join(' ')} · {fmtBtu(x.capacidadeBtu)} · {x.fluido} · {l.ambienteMap.get(x.ambienteId || '')?.nome}
+                  <span className="font-normal text-slate-600"> — plano: {l.planoMap.get(x.planoId || '')?.nome || 'personalizado'}</span>
+                </p>
+                <table className="w-full border-collapse text-[9.5px]">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className={cx(td, 'text-left')}>Atividade</th>
+                      <th className={td}>Periodicidade</th>
+                      <th className={td}>Últ. exec.</th>
+                      <th className={td}>Próxima</th>
+                      {meses12.map((mm) => <th key={mm.idx} className={cx(td, 'w-6')}>{MESES_CURTOS[mm.m]}</th>)}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+                  </thead>
+                  <tbody>
+                    {rots.map((r) => {
+                      const marcas = marcasCiclo(r);
+                      return (
+                        <tr key={r.id}>
+                          <td className={td}>{r.descricao}</td>
+                          <td className={cx(td, 'whitespace-nowrap text-center')}>{periodicidadeLabel(r.periodicidade)} ({r.intervaloDias} d)</td>
+                          <td className={cx(td, 'whitespace-nowrap text-center')}>{r.ultimaExecucao ? fmtDate(r.ultimaExecucao) : '—'}</td>
+                          <td className={cx(td, 'whitespace-nowrap text-center', r.proximaExecucao < hoje && 'font-bold text-rose-700')}>{fmtDate(r.proximaExecucao)}</td>
+                          {meses12.map((mm) => <td key={mm.idx} className={cx(td, 'text-center font-bold', marcas[mm.key] === '!' && 'text-rose-700', marcas[mm.key] === 'E' && 'text-emerald-700')}>{marcas[mm.key] || ''}</td>)}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </Sec>
 
         <Sec n="7" title="Registro de execução das manutenções programadas">
+          <table className="mb-3 w-full border-collapse text-[10.5px]">
+            <thead>
+              <tr className="bg-slate-100 text-left">
+                <th className={td}>Equipamento</th><th className={td}>Rotinas</th><th className={td}>Executadas (E)</th><th className={td}>Não executadas (N)</th><th className={td}>Vencidas hoje</th><th className={td}>Última execução</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eqs.map((x) => {
+                const rots = rotinas.filter((r) => r.equipamentoId === x.id && r.ativa);
+                const ex = execCiclo.filter((e) => e.equipamentoId === x.id);
+                const ult = rots.map((r) => r.ultimaExecucao).filter(Boolean).sort().pop();
+                return (
+                  <tr key={x.id}>
+                    <td className={td}>{x.tag} · {l.ambienteMap.get(x.ambienteId || '')?.nome}</td>
+                    <td className={td}>{rots.length}</td>
+                    <td className={td}>{ex.filter((e) => e.status === 'E').length}</td>
+                    <td className={td}>{ex.filter((e) => e.status === 'N').length}</td>
+                    <td className={cx(td, rots.some((r) => r.proximaExecucao < hoje) && 'font-semibold text-rose-700')}>{rots.filter((r) => r.proximaExecucao < hoje).length}</td>
+                    <td className={td}>{fmtDate(ult)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
           <table className="w-full border-collapse text-[10.5px]">
             <thead>
               <tr className="bg-slate-100 text-left">

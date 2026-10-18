@@ -4,13 +4,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertOctagon, ClipboardPlus, Pencil, Printer, QrCode, Wind } from 'lucide-react';
 import { db } from '../db/db';
 import { EntityFormModal } from '../components/crud';
-import { Badge, Button, Card, PageHeader, Select, Stat, cx } from '../components/ui';
+import { Badge, Button, Card, PageHeader, Select, Stat } from '../components/ui';
 import { PrintToolbar, QRImage, appUrl } from '../components/widgets';
 import { equipamentosCfg } from '../modules/entities';
 import { useLookups } from '../lib/lookups';
 import { CRITICIDADES, STATUS_EQUIPAMENTO, gwpDe, statusOs } from '../lib/catalogs';
-import { MESES_CURTOS, diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
-import { monthIndexFromStr, situacaoMes } from '../lib/schedule';
+import { diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
+import RotinasEquipamento from '../components/RotinasEquipamento';
+import { useSessao } from '../lib/sessao';
 import { totais } from '../components/widgets';
 
 export function EquipamentoDetalhe() {
@@ -18,6 +19,7 @@ export function EquipamentoDetalhe() {
   const l = useLookups();
   const navigate = useNavigate();
   const [edit, setEdit] = useState(false);
+  const { pode } = useSessao();
   const eq = l.equipamentoMap.get(id || '');
   const osList = useLiveQuery(() => db.os.toArray(), []) || [];
   const fluidos = useLiveQuery(() => db.fluidos.where('equipamentoId').equals(id || '').toArray(), [id]) || [];
@@ -30,9 +32,6 @@ export function EquipamentoDetalhe() {
   const plano = l.planoMap.get(eq.planoId || '');
   const amb = l.ambienteMap.get(eq.ambienteId || '');
   const uni = l.unidadeMap.get(eq.unidadeId);
-  const pmoc = l.pmocs.find((p) => p.unidadeId === eq.unidadeId && p.status === 'vigente');
-  const ano = new Date().getFullYear();
-  const startIdx = monthIndexFromStr(pmoc?.vigenciaInicio) ?? ano * 12;
   const corretivas = historico.filter((o) => ['Corretiva', 'Emergencial'].includes(o.tipo) && o.status !== 'cancelada');
   const custo = historico.reduce((a, o) => a + totais(o.pecas, o.servicos, o.deslocamento, o.desconto).total / Math.max(1, o.equipamentos.length), 0);
   // MTBF simples: intervalo médio entre corretivas (dias)
@@ -70,9 +69,9 @@ export function EquipamentoDetalhe() {
         icon={<Wind size={20} />}
         actions={
           <>
-            <Button variant="outline" icon={<Pencil size={16} />} onClick={() => setEdit(true)}>Editar</Button>
+            {pode('cadastrar') && <Button variant="outline" icon={<Pencil size={16} />} onClick={() => setEdit(true)}>Editar</Button>}
             <Link to={`/ocorrencias?novo=1`}><Button variant="outline" icon={<AlertOctagon size={16} />}>Ocorrência</Button></Link>
-            <Button icon={<ClipboardPlus size={16} />} onClick={() => navigate(`/os/nova?equipamentoId=${eq.id}&tipo=Corretiva`)}>Abrir OS</Button>
+            {pode('gerir_os') && <Button icon={<ClipboardPlus size={16} />} onClick={() => navigate(`/os/nova?equipamentoId=${eq.id}&tipo=Corretiva`)}>Abrir OS</Button>}
           </>
         }
       />
@@ -103,16 +102,7 @@ export function EquipamentoDetalhe() {
         </Card>
       </div>
 
-      <Card title={`Cronograma ${ano}`} className="mt-4" bodyClass="p-3">
-        <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-12">
-          {MESES_CURTOS.map((m, i) => {
-            const s = situacaoMes(eq.id, plano, ano, i, startIdx, osList);
-            const cls = { nao_programado: 'bg-slate-100 text-slate-400 dark:bg-slate-800', programado: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200', em_andamento: 'bg-amber-100 text-amber-800', executado: 'bg-emerald-500 text-white', atrasado: 'bg-rose-500 text-white' }[s];
-            return <div key={m} className={cx('rounded-lg py-2 text-center text-xs font-semibold', cls)}>{m}</div>;
-          })}
-        </div>
-        {!pmoc && <p className="mt-2 text-xs text-slate-500">Unidade sem PMOC vigente — o cronograma considera janeiro como início.</p>}
-      </Card>
+      <RotinasEquipamento eq={eq} />
 
       {ultimaMed && (
         <Card title={`Últimas medições (${ultimaMed.o.numero} · ${fmtDate(ultimaMed.o.dataAgendada)})`} className="mt-4">

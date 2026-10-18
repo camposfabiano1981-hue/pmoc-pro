@@ -5,6 +5,7 @@ import type {
   Ambiente, Cliente, Contrato, Empresa, Equipamento, Fornecedor, Peca, PlanoManutencao, Pmoc, Profissional, Servico, Unidade,
 } from '../db/types';
 import { EMPRESA_PADRAO } from '../db/db';
+import { todayStr } from './format';
 
 export interface Lookups {
   ready: boolean;
@@ -31,6 +32,8 @@ export interface Lookups {
   fornecedorMap: Map<string, Fornecedor>;
   contratoMap: Map<string, Contrato>;
   pmocMap: Map<string, Pmoc>;
+  /** Resumo das rotinas por equipamento: próxima execução e quantidade vencida */
+  rotinaResumo: Map<string, { proxima?: string; vencidas: number; total: number }>;
 }
 
 const empty: Lookups = {
@@ -38,7 +41,7 @@ const empty: Lookups = {
   empresa: EMPRESA_PADRAO,
   clientes: [], unidades: [], ambientes: [], equipamentos: [], planos: [], profissionais: [], pecas: [], servicos: [], fornecedores: [], contratos: [], pmocs: [],
   clienteMap: new Map(), unidadeMap: new Map(), ambienteMap: new Map(), equipamentoMap: new Map(), planoMap: new Map(), profissionalMap: new Map(),
-  pecaMap: new Map(), servicoMap: new Map(), fornecedorMap: new Map(), contratoMap: new Map(), pmocMap: new Map(),
+  pecaMap: new Map(), servicoMap: new Map(), fornecedorMap: new Map(), contratoMap: new Map(), pmocMap: new Map(), rotinaResumo: new Map(),
 };
 
 const Ctx = createContext<Lookups>(empty);
@@ -79,6 +82,20 @@ export function LookupsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const rotinaResumo = useLiveQuery(async () => {
+    const hoje = todayStr();
+    const m = new Map<string, { proxima?: string; vencidas: number; total: number }>();
+    await db.rotinas.each((r) => {
+      if (!r.ativa) return;
+      const x = m.get(r.equipamentoId) || { vencidas: 0, total: 0 };
+      x.total++;
+      if (r.proximaExecucao < hoje) x.vencidas++;
+      if (!x.proxima || r.proximaExecucao < x.proxima) x.proxima = r.proximaExecucao;
+      m.set(r.equipamentoId, x);
+    });
+    return m;
+  }, []);
+
   const value = useMemo<Lookups>(() => {
     if (!data) return empty;
     return {
@@ -95,8 +112,9 @@ export function LookupsProvider({ children }: { children: ReactNode }) {
       fornecedorMap: toMap(data.fornecedores),
       contratoMap: toMap(data.contratos),
       pmocMap: toMap(data.pmocs),
+      rotinaResumo: rotinaResumo || new Map(),
     };
-  }, [data]);
+  }, [data, rotinaResumo]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

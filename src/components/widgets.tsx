@@ -194,7 +194,7 @@ export function totais(pecas: ItemPeca[], servicos: ItemServico[], deslocamento 
   return { pecas: tp, servicos: ts, custoPecas, total };
 }
 
-export function PecasEditor({ itens, onChange, readOnly, extra }: { itens: ItemPeca[]; onChange: (i: ItemPeca[]) => void; readOnly?: boolean; extra?: (item: ItemPeca, i: number) => ReactNode }) {
+export function PecasEditor({ itens, onChange, readOnly, extra, ocultarPrecos }: { itens: ItemPeca[]; onChange: (i: ItemPeca[]) => void; readOnly?: boolean; extra?: (item: ItemPeca, i: number) => ReactNode; ocultarPrecos?: boolean }) {
   const { pecas, pecaMap } = useLookups();
   const [sel, setSel] = useState('');
   const upd = (i: number, patch: Partial<ItemPeca>) => onChange(itens.map((x, k) => (k === i ? { ...x, ...patch } : x)));
@@ -212,8 +212,8 @@ export function PecasEditor({ itens, onChange, readOnly, extra }: { itens: ItemP
             <tr>
               <th className="py-1 pr-2">Peça / material</th>
               <th className="w-20 py-1 pr-2">Qtd</th>
-              <th className="w-28 py-1 pr-2">Preço un.</th>
-              <th className="w-28 py-1 pr-2 text-right">Subtotal</th>
+              {!ocultarPrecos && <th className="w-28 py-1 pr-2">Preço un.</th>}
+              {!ocultarPrecos && <th className="w-28 py-1 pr-2 text-right">Subtotal</th>}
               <th className="w-10" />
             </tr>
           </thead>
@@ -233,8 +233,8 @@ export function PecasEditor({ itens, onChange, readOnly, extra }: { itens: ItemP
                     {extra?.(it, i)}
                   </td>
                   <td className="py-1.5 pr-2">{readOnly ? n2(it.quantidade) : <Input type="number" step="any" value={it.quantidade} disabled={it.baixado} onChange={(e) => upd(i, { quantidade: Number(e.target.value) })} />}</td>
-                  <td className="py-1.5 pr-2">{readOnly ? money(it.precoUnit) : <Input type="number" step="0.01" value={it.precoUnit} onChange={(e) => upd(i, { precoUnit: Number(e.target.value) })} />}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{money(it.quantidade * it.precoUnit)}</td>
+                  {!ocultarPrecos && <td className="py-1.5 pr-2">{readOnly ? money(it.precoUnit) : <Input type="number" step="0.01" value={it.precoUnit} onChange={(e) => upd(i, { precoUnit: Number(e.target.value) })} />}</td>}
+                  {!ocultarPrecos && <td className="py-1.5 pr-2 text-right tabular-nums">{money(it.quantidade * it.precoUnit)}</td>}
                   <td>
                     {!readOnly && !it.baixado && (
                       <IconButton title="Remover" onClick={() => onChange(itens.filter((_, k) => k !== i))}>

@@ -9,6 +9,7 @@ import { useLookups } from '../lib/lookups';
 import { MESES_CURTOS } from '../lib/format';
 import { PERIODICIDADES, TIPOS_EQUIPAMENTO, periodicidadeSigla } from '../lib/catalogs';
 import { isDue } from '../lib/schedule';
+import { sincronizarPlanoNosEquipamentos } from '../lib/rotinas';
 
 export function PlanosList() {
   const l = useLookups();
@@ -91,7 +92,11 @@ export function PlanoEdit() {
   };
   const salvar = async () => {
     await db.planos.put({ ...p, updatedAt: nowIso() });
-    toast('Plano salvo.');
+    const n = l.equipamentos.filter((e) => e.planoId === p.id).length;
+    if (n && (await confirm({ title: 'Atualizar equipamentos', message: `Aplicar as alterações às rotinas dos ${n} equipamento(s) que usam este plano? Novas atividades serão incluídas; periodicidades personalizadas no equipamento e o histórico são mantidos.`, confirmText: 'Aplicar' }))) {
+      const qtd = await sincronizarPlanoNosEquipamentos(p.id);
+      toast(`Plano salvo e aplicado a ${qtd} equipamento(s).`);
+    } else toast('Plano salvo.');
   };
   const excluir = async () => {
     const n = l.equipamentos.filter((e) => e.planoId === p.id).length;

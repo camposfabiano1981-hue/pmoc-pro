@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Search } from 'lucide-react';
 import { db } from '../db/db';
 import { Badge, Card, PageHeader } from '../components/ui';
+import { useSessao } from '../lib/sessao';
 import { useLookups, equipLabel } from '../lib/lookups';
 import { norm } from '../lib/format';
 import { statusOs } from '../lib/catalogs';
@@ -12,6 +13,7 @@ export default function Busca() {
   const [params] = useSearchParams();
   const q = params.get('q') || '';
   const l = useLookups();
+  const { usuario } = useSessao();
   const os = useLiveQuery(() => db.os.toArray(), []) || [];
   const oc = useLiveQuery(() => db.ocorrencias.toArray(), []) || [];
   const r = useMemo(() => {
@@ -38,7 +40,7 @@ export default function Busca() {
   return (
     <div>
       <PageHeader title={`Resultados para "${q}"`} subtitle={`${total} resultado(s)`} icon={<Search size={20} />} />
-      <Sec title="Ordens de serviço" n={r.os.length}>{r.os.map((o) => <li key={o.id}><Link className={li} to={`/os/${o.id}`}><b>{o.numero}</b> · {o.titulo} <Badge className={statusOs(o.status).cor}>{statusOs(o.status).label}</Badge></Link></li>)}</Sec>
+      <Sec title="Ordens de serviço" n={r.os.length}>{r.os.map((o) => <li key={o.id}><Link className={li} to={`${usuario.perfil === 'tecnico' ? '/campo/os/' : '/os/'}${o.id}`}><b>{o.numero}</b> · {o.titulo} <Badge className={statusOs(o.status).cor}>{statusOs(o.status).label}</Badge></Link></li>)}</Sec>
       <Sec title="Equipamentos" n={r.equip.length}>{r.equip.map((e) => <li key={e.id}><Link className={li} to={`/equipamentos/${e.id}`}>{equipLabel(e, l)}</Link></li>)}</Sec>
       <Sec title="Ocorrências" n={r.oc.length}>{r.oc.map((o) => <li key={o.id}><Link className={li} to={`/ocorrencias?editar=${o.id}`}><b>{o.numero}</b> · {o.descricao}</Link></li>)}</Sec>
       <Sec title="Clientes" n={r.clientes.length}>{r.clientes.map((c) => <li key={c.id}><Link className={li} to={`/clientes?editar=${c.id}`}>{c.nome}</Link></li>)}</Sec>

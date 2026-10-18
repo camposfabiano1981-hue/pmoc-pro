@@ -16,6 +16,8 @@ export default function Dashboard() {
   const osList = useLiveQuery(() => db.os.toArray(), []);
   const ocorrencias = useLiveQuery(() => db.ocorrencias.toArray(), []) || [];
   const analises = useLiveQuery(() => db.analisesAr.toArray(), []) || [];
+  const rotinas = useLiveQuery(() => db.rotinas.toArray(), []) || [];
+  const execucoes = useLiveQuery(() => db.execucoes.toArray(), []) || [];
   const meses = useMemo(() => ultimosMeses(12), []);
 
   const d = useMemo(() => {
@@ -23,7 +25,7 @@ export default function Dashboard() {
     const hoje = todayStr();
     const ab = abertas(osList);
     const s = seriesMensais(osList, meses);
-    const cump = cumprimentoMensal(osList, l, meses);
+    const cump = cumprimentoMensal(execucoes, rotinas, meses);
     return {
       abertas: ab,
       atrasadas: ab.filter((o) => isAtrasada(o, hoje)),
@@ -31,13 +33,15 @@ export default function Dashboard() {
       emExec: ab.filter((o) => o.status === 'em_execucao'),
       series: s,
       cump,
-      cumpAtual: cumprimentoAcumulado(osList, l, meses),
+      cumpAtual: cumprimentoAcumulado(execucoes, rotinas, meses),
+      rotinasVencidas: rotinas.filter((r) => r.ativa && r.proximaExecucao < hoje).length,
+      rotinasAtivas: rotinas.filter((r) => r.ativa).length,
       mttr: mttrHoras(osList),
       sla: slaCumprido(osList),
-      alertas: alertas(l, osList, ocorrencias, analises),
+      alertas: alertas(l, osList, ocorrencias, analises, rotinas),
       proximas: ab.filter((o) => (o.dataAgendada || '') >= hoje).sort((a, b) => (a.dataAgendada || '').localeCompare(b.dataAgendada || '')).slice(0, 8),
     };
-  }, [osList, ocorrencias, analises, l, meses]);
+  }, [osList, ocorrencias, analises, rotinas, execucoes, l, meses]);
 
   if (!d) return <p className="text-sm text-slate-500">Carregando…</p>;
   const capTotal = l.equipamentos.filter((e) => e.status !== 'desativado').reduce((a, e) => a + (e.capacidadeBtu || 0), 0);
@@ -52,7 +56,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Link to="/os"><Stat label="OS em aberto" value={d.abertas.length} hint={`${d.emExec.length} em execução · ${d.hoje.length} hoje`} icon={<ClipboardList size={18} />} /></Link>
         <Link to="/os?status=atrasadas"><Stat label="OS atrasadas" value={d.atrasadas.length} tone={d.atrasadas.length ? 'red' : 'green'} icon={<Clock size={18} />} hint="Prazo/SLA vencido" /></Link>
-        <Link to="/cronograma"><Stat label="Cumprimento PMOC" value={d.cumpAtual !== null ? `${d.cumpAtual}%` : '—'} tone={d.cumpAtual === null || d.cumpAtual >= 90 ? 'green' : d.cumpAtual >= 70 ? 'amber' : 'red'} icon={<CheckCircle2 size={18} />} hint="Meses encerrados (12 meses)" /></Link>
+        <Link to="/cronograma"><Stat label="Cumprimento PMOC" value={d.cumpAtual !== null ? `${d.cumpAtual}%` : '—'} tone={d.cumpAtual === null || d.cumpAtual >= 90 ? 'green' : d.cumpAtual >= 70 ? 'amber' : 'red'} icon={<CheckCircle2 size={18} />} hint={`Meses encerrados · ${d.rotinasVencidas} de ${d.rotinasAtivas} rotinas vencidas`} /></Link>
         <Stat label="MTTR corretivas" value={d.mttr !== null ? `${Math.round(d.mttr)} h` : '—'} tone="violet" icon={<Timer size={18} />} hint={`SLA cumprido: ${d.sla !== null ? d.sla + '%' : '—'}`} />
         <Link to="/equipamentos"><Stat label="Equipamentos" value={l.equipamentos.length} hint={`${fmtTr(capTotal)} instalados`} icon={<Wind size={18} />} tone="brand" /></Link>
         <Stat label="Disponibilidade" value={`${disponibilidade}%`} hint={`${operando} operando`} icon={<Gauge size={18} />} tone={disponibilidade >= 95 ? 'green' : 'amber'} />
@@ -78,7 +82,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Card title="Cumprimento do PMOC (%) — mês corrente parcial">
+        <Card title="Cumprimento das rotinas por equipamento (%) — mês corrente parcial">
           <LineChart labels={meses.map((m) => m.label)} series={[{ label: 'Cumprimento', data: d.cump }]} yFmt={(v) => `${v}%`} yMax={100} />
         </Card>
         <Card title="Faturamento das OS concluídas">

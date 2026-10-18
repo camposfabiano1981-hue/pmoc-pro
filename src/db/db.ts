@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
-  AnaliseAr, Ambiente, Base, Cliente, Contrato, Empresa, Equipamento, Fornecedor, MovEstoque, Ocorrencia,
-  Orcamento, OS, Peca, PlanoManutencao, Pmoc, Profissional, RegistroFluido, Servico, Setting, Unidade,
+  AnaliseAr, Ambiente, Base, Cliente, Contrato, Empresa, Equipamento, Execucao, Fornecedor, MovEstoque, Ocorrencia,
+  Orcamento, OS, Peca, PlanoManutencao, Pmoc, Profissional, RegistroFluido, Rotina, Servico, Setting, Unidade,
 } from './types';
 
 export class PmocDB extends Dexie {
@@ -22,6 +22,8 @@ export class PmocDB extends Dexie {
   orcamentos!: Table<Orcamento, string>;
   analisesAr!: Table<AnaliseAr, string>;
   fluidos!: Table<RegistroFluido, string>;
+  rotinas!: Table<Rotina, string>;
+  execucoes!: Table<Execucao, string>;
   settings!: Table<Setting, string>;
 
   constructor() {
@@ -46,6 +48,11 @@ export class PmocDB extends Dexie {
       fluidos: 'id, equipamentoId, data',
       settings: 'key',
     });
+    // v2: controle de periodicidade por equipamento
+    this.version(2).stores({
+      rotinas: 'id, equipamentoId, proximaExecucao, planoId',
+      execucoes: 'id, rotinaId, equipamentoId, osId, data',
+    });
   }
 }
 
@@ -60,7 +67,7 @@ export type TableName = Exclude<
 
 export const ALL_TABLES: TableName[] = [
   'clientes', 'unidades', 'ambientes', 'equipamentos', 'planos', 'profissionais', 'pecas', 'movimentos',
-  'servicos', 'fornecedores', 'contratos', 'pmocs', 'os', 'ocorrencias', 'orcamentos', 'analisesAr', 'fluidos',
+  'servicos', 'fornecedores', 'contratos', 'pmocs', 'os', 'ocorrencias', 'orcamentos', 'analisesAr', 'fluidos', 'rotinas', 'execucoes',
 ];
 
 export function uid(): string {

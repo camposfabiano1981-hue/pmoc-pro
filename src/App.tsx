@@ -5,6 +5,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider, ToastProvider } from './components/ui';
 import { EntityPage } from './components/crud';
 import { LookupsProvider } from './lib/lookups';
+import { SessaoProvider } from './lib/sessao';
+import { CampoHome, CampoOS } from './pages/Campo';
 import {
   ambientesCfg, clientesCfg, contratosCfg, equipamentosCfg, fluidosCfg, fornecedoresCfg, pecasCfg, profissionaisCfg, qualidadeArCfg, servicosCfg, unidadesCfg,
 } from './modules/entities';
@@ -17,7 +19,8 @@ import OsPrint from './pages/OsPrint';
 import OrcamentoPrint from './pages/OrcamentoPrint';
 import Estoque from './pages/Estoque';
 import { PlanoEdit, PlanosList } from './pages/Planos';
-import { Cronograma, PmocDocumento, pmocsCfg } from './pages/Pmoc';
+import { PmocDocumento, pmocsCfg } from './pages/Pmoc';
+import Cronograma from './pages/Cronograma';
 import { EquipamentoDetalhe, Etiquetas } from './pages/Equipamento';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
@@ -29,10 +32,13 @@ export default function App() {
     <ToastProvider>
       <ConfirmProvider>
         <LookupsProvider>
+          <SessaoProvider>
           <HashRouter>
             <Routes>
               <Route element={<Layout />}>
                 <Route index element={<Dashboard />} />
+                <Route path="campo" element={<CampoHome />} />
+                <Route path="campo/os/:id" element={<CampoOS />} />
                 <Route path="agenda" element={<Agenda />} />
                 <Route path="os" element={<OsList />} />
                 <Route path="os/nova" element={<OsEdit />} />
@@ -68,6 +74,7 @@ export default function App() {
             </Routes>
             <Welcome />
           </HashRouter>
+          </SessaoProvider>
         </LookupsProvider>
       </ConfirmProvider>
     </ToastProvider>

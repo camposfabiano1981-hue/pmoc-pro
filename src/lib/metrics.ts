@@ -1,8 +1,7 @@
-import type { AnaliseAr, Ocorrencia, OS } from '../db/types';
+import type { AnaliseAr, Execucao, Ocorrencia, OS, Rotina } from '../db/types';
 import type { Lookups } from './lookups';
 import { MESES_CURTOS, diffDays, diffHours, todayStr } from './format';
 import { isAtrasada } from './osHelpers';
-import { monthIndexFromStr, situacaoMes } from './schedule';
 import { totais } from '../components/widgets';
 import { OS_FINALIZADAS } from './catalogs';
 
@@ -33,39 +32,27 @@ export function seriesMensais(osList: OS[], meses: Mes[]) {
   };
 }
 
-/** % de cumprimento do PMOC por mês (todas as unidades com PMOC vigente). */
-export function cumprimentoMensal(osList: OS[], l: Lookups, meses: Mes[]): (number | null)[] {
-  return cumprimentoDetalhado(osList, l, meses).map((x) => (x.devidos ? Math.round((x.feitos / x.devidos) * 100) : null));
+/** % de cumprimento das rotinas por mês: executadas ÷ (executadas + não executadas + vencidas no mês). */
+export function cumprimentoMensal(execs: Execucao[], rotinas: Rotina[], meses: Mes[]): (number | null)[] {
+  return cumprimentoDetalhado(execs, rotinas, meses).map((x) => (x.devidos ? Math.round((x.feitos / x.devidos) * 100) : null));
 }
 
 /** Cumprimento acumulado dos meses já encerrados (exclui o mês corrente, ainda em andamento). */
-export function cumprimentoAcumulado(osList: OS[], l: Lookups, meses: Mes[], ref = new Date()): number | null {
+export function cumprimentoAcumulado(execs: Execucao[], rotinas: Rotina[], meses: Mes[], ref = new Date()): number | null {
   const atual = ref.getFullYear() * 12 + ref.getMonth();
-  const det = cumprimentoDetalhado(osList, l, meses).filter((_, i) => meses[i].ano * 12 + meses[i].m < atual);
+  const det = cumprimentoDetalhado(execs, rotinas, meses).filter((_, i) => meses[i].ano * 12 + meses[i].m < atual);
   const devidos = det.reduce((a, x) => a + x.devidos, 0);
   return devidos ? Math.round((det.reduce((a, x) => a + x.feitos, 0) / devidos) * 100) : null;
 }
 
-export function cumprimentoDetalhado(osList: OS[], l: Lookups, meses: Mes[]): { devidos: number; feitos: number }[] {
-  const prevs = osList.filter((o) => o.tipo === 'Preventiva');
-  const pmocs = l.pmocs.filter((p) => p.status === 'vigente' || p.status === 'vencido');
+export function cumprimentoDetalhado(execs: Execucao[], rotinas: Rotina[], meses: Mes[]): { devidos: number; feitos: number }[] {
+  const hoje = todayStr();
   return meses.map((mm) => {
-    let devidos = 0;
-    let feitos = 0;
-    for (const p of pmocs) {
-      const start = monthIndexFromStr(p.vigenciaInicio);
-      const fim = monthIndexFromStr(p.vigenciaFim);
-      const idx = mm.ano * 12 + mm.m;
-      if (start === null || idx < start || (fim !== null && idx > fim)) continue;
-      for (const e of l.equipamentos) {
-        if (e.unidadeId !== p.unidadeId || e.status === 'desativado') continue;
-        const s = situacaoMes(e.id, l.planoMap.get(e.planoId || ''), mm.ano, mm.m, start, prevs);
-        if (s === 'nao_programado') continue;
-        devidos++;
-        if (s === 'executado') feitos++;
-      }
-    }
-    return { devidos, feitos };
+    const ex = execs.filter((e) => e.data.slice(0, 7) === mm.key);
+    const feitos = ex.filter((e) => e.status === 'E').length;
+    const nao = ex.filter((e) => e.status === 'N').length;
+    const vencidas = rotinas.filter((r) => r.ativa && r.proximaExecucao < hoje && r.proximaExecucao.slice(0, 7) === mm.key).length;
+    return { devidos: feitos + nao + vencidas, feitos };
   });
 }
 
@@ -87,9 +74,11 @@ export interface Alerta {
   link: string;
 }
 
-export function alertas(l: Lookups, osList: OS[], ocorrencias: Ocorrencia[], analises: AnaliseAr[]): Alerta[] {
+export function alertas(l: Lookups, osList: OS[], ocorrencias: Ocorrencia[], analises: AnaliseAr[], rotinas: Rotina[] = []): Alerta[] {
   const out: Alerta[] = [];
   const hoje = todayStr();
+  const venc = rotinas.filter((r) => r.ativa && r.proximaExecucao < hoje);
+  if (venc.length) out.push({ nivel: 'critico', texto: `${venc.length} rotina(s) de manutenção vencida(s) em ${new Set(venc.map((r) => r.equipamentoId)).size} equipamento(s)`, link: '/cronograma' });
   const atrasadas = osList.filter((o) => isAtrasada(o, hoje));
   if (atrasadas.length) out.push({ nivel: 'critico', texto: `${atrasadas.length} OS atrasada(s) em relação ao prazo/SLA`, link: '/os?status=atrasadas' });
   const naoAn = ocorrencias.filter((o) => o.status === 'nao_analisada');

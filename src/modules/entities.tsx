@@ -6,9 +6,10 @@ import type { EntityConfig, FieldDef } from '../components/crud';
 import { Badge, Button, IconButton, Input } from '../components/ui';
 import { db } from '../db/db';
 import { planoSugerido } from '../db/planosPadrao';
+import { aplicarPlano } from '../lib/rotinas';
 import type { Certificacao } from '../db/types';
 import {
-  CATEGORIAS_PECA, CATEGORIAS_SERVICO, CERTIFICACOES, CRITICIDADES, FLUIDOS, FUNCOES, MARCAS, RE09, STATUS_EQUIPAMENTO, TIPOS_ATIVIDADE_AMBIENTE,
+  CATEGORIAS_PECA, CATEGORIAS_SERVICO, CERTIFICACOES, CRITICIDADES, FLUIDOS, FUNCOES, MARCAS, PERFIS, RE09, SETORES, STATUS_EQUIPAMENTO, TIPOS_ATIVIDADE_AMBIENTE,
   TIPOS_EDIFICACAO, TIPOS_EQUIPAMENTO, UFS, UNIDADES_MEDIDA, gwpDe,
 } from '../lib/catalogs';
 import { diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
@@ -224,7 +225,8 @@ export const equipamentosCfg: EntityConfig = {
     { name: 'dataFabricacao', label: 'Fabricação', type: 'date', span: 1, section: 'Datas e plano' },
     { name: 'dataInstalacao', label: 'Instalação', type: 'date', span: 1, section: 'Datas e plano' },
     { name: 'garantiaAte', label: 'Garantia até', type: 'date', span: 1, section: 'Datas e plano' },
-    { name: 'planoId', label: 'Plano de manutenção', type: 'ref', span: 1, section: 'Datas e plano', ref: { list: (l) => l.planos } },
+    { name: 'planoId', label: 'Plano modelo de manutenção', type: 'ref', span: 2, section: 'Datas e plano', ref: { list: (l) => l.planos }, help: 'As rotinas do equipamento são criadas a partir deste plano e podem ser ajustadas na ficha' },
+    { name: 'inicioPlano', label: '1ª execução das rotinas', type: 'date', span: 1, section: 'Datas e plano', help: 'Data base da periodicidade' },
     { name: 'observacoes', label: 'Observações', type: 'textarea', span: 4, section: 'Datas e plano' },
   ],
   columns: [
@@ -237,7 +239,20 @@ export const equipamentosCfg: EntityConfig = {
     { key: 'fluido', label: 'Fluido', className: 'whitespace-nowrap' },
     { key: 'criticidade', label: 'Crit.', render: (r) => <Badge className={r.criticidade === 'A' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200' : r.criticidade === 'B' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : undefined}>{r.criticidade}</Badge> },
     { key: 'status', label: 'Situação', value: (r) => STATUS_EQUIPAMENTO.find((s) => s.value === r.status)?.label, render: (r) => { const s = STATUS_EQUIPAMENTO.find((x) => x.value === r.status); return <Badge className={s?.cor}>{s?.label}</Badge>; } },
-    { key: 'planoId', label: 'Plano', value: (r, l) => l.planoMap.get(r.planoId)?.nome || 'Sem plano' },
+    {
+      key: 'proxima', label: 'Próx. manutenção', className: 'whitespace-nowrap',
+      value: (r, l) => l.rotinaResumo.get(r.id)?.proxima || '9999',
+      render: (r, l) => {
+        const x = l.rotinaResumo.get(r.id);
+        if (!x) return <span className="text-xs text-slate-400">sem rotinas</span>;
+        return (
+          <span className="flex flex-col gap-0.5">
+            {vencBadge(x.proxima)}
+            {x.vencidas > 0 && <span className="text-[11px] font-medium text-rose-600">{x.vencidas} rotina(s) vencida(s)</span>}
+          </span>
+        );
+      },
+    },
   ],
   filters: [
     unidadeFilter,
@@ -248,6 +263,14 @@ export const equipamentosCfg: EntityConfig = {
   searchText: (r, l) => [r.tag, r.tipo, r.marca, r.modelo, r.numeroSerie, r.patrimonio, l.ambienteMap.get(r.ambienteId)?.nome, l.unidadeMap.get(r.unidadeId)?.nome].join(' '),
   defaults: (l) => ({ unidadeId: l.unidades[0]?.id, criticidade: 'B', status: 'operando', tipo: 'Split Hi-Wall', fluido: 'R-410A', tensao: '220 V', fases: 'Monofásico', planoId: planoSugerido('Split Hi-Wall', l.planos)?.id }),
   numbering: { field: 'tag', kind: 'eq' },
+  somenteLeituraPara: ['tecnico'],
+  afterSave: async (rec, anterior) => {
+    const temRotinas = await db.rotinas.where('equipamentoId').equals(rec.id).count();
+    if (!anterior || anterior.planoId !== rec.planoId || !temRotinas) {
+      const r = await aplicarPlano(rec.id, rec.inicioPlano || todayStr());
+      if (r.criadas) return `${r.criadas} rotina(s) de manutenção criadas para o equipamento.`;
+    }
+  },
   detailPath: (r) => `/equipamentos/${r.id}`,
   rowActions: (r) => (
     <Link to={`/equipamentos/${r.id}`}><IconButton title="Ficha / QR Code"><QrCode size={15} /></IconButton></Link>
@@ -297,6 +320,9 @@ export const profissionaisCfg: EntityConfig = {
     { name: 'conselho', label: 'Conselho', type: 'select', options: ['CREA', 'CFT', 'CRT', 'CAU', 'Nenhum'], span: 1, section: 'Identificação', help: 'Técnicos industriais: CFT/CRT (TRT)' },
     { name: 'registro', label: 'Nº de registro', type: 'text', span: 1, section: 'Identificação' },
     { name: 'especialidades', label: 'Especialidades', type: 'text', span: 4, section: 'Identificação', placeholder: 'Split, VRF, chiller, câmara fria, elétrica…' },
+    { name: 'perfil', label: 'Perfil de acesso', type: 'select', options: PERFIS, span: 2, section: 'Acesso à plataforma', help: 'Técnico lança as execuções; supervisor libera as OS' },
+    { name: 'pin', label: 'PIN de acesso (opcional)', type: 'text', span: 1, section: 'Acesso à plataforma', placeholder: '4 a 6 dígitos' },
+    { name: 'setor', label: 'Setor / equipe', type: 'text', span: 1, section: 'Acesso à plataforma', suggestions: SETORES },
     { name: 'telefone', label: 'Telefone / WhatsApp', type: 'tel', span: 1, section: 'Contato e custos' },
     { name: 'email', label: 'E-mail', type: 'email', span: 1, section: 'Contato e custos' },
     { name: 'valorHora', label: 'Custo hora (R$)', type: 'money', span: 1, section: 'Contato e custos' },
@@ -310,6 +336,7 @@ export const profissionaisCfg: EntityConfig = {
   columns: [
     { key: 'nome', label: 'Nome', render: (r) => <div className="flex items-center gap-2"><span className="h-3 w-3 shrink-0 rounded-full" style={{ background: r.cor || '#94a3b8' }} /><div><p className="font-medium">{r.nome}</p><p className="text-xs text-slate-500">{r.especialidades}</p></div></div> },
     { key: 'funcao', label: 'Função' },
+    { key: 'perfil', label: 'Perfil', value: (r) => PERFIS.find((p) => p.value === (r.perfil || 'tecnico'))?.label.split(' ')[0] },
     { key: 'registro', label: 'Registro', value: (r) => [r.conselho !== 'Nenhum' ? r.conselho : '', r.registro].filter(Boolean).join(' ') },
     { key: 'telefone', label: 'Telefone' },
     { key: 'valorHora', label: 'Custo/h', value: (r) => r.valorHora || 0, render: (r) => money(r.valorHora) },
@@ -318,7 +345,7 @@ export const profissionaisCfg: EntityConfig = {
     { key: 'ativo', label: 'Situação', value: (r) => (r.ativo ? 'Ativo' : 'Inativo') },
   ],
   searchText: (r) => [r.nome, r.funcao, r.registro, r.especialidades, r.telefone].join(' '),
-  defaults: () => ({ ativo: true, certificacoes: [], cor: '#0e7490', funcao: 'Técnico em Refrigeração' }),
+  defaults: () => ({ ativo: true, certificacoes: [], cor: '#0e7490', funcao: 'Técnico em Refrigeração', perfil: 'tecnico', setor: 'Manutenção' }),
 };
 
 /* ---------------- Peças ---------------- */

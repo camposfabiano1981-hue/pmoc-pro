@@ -2,8 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertOctagon, BarChart3, Boxes, Building2, CalendarDays, ClipboardCheck, ClipboardList, Factory, FileSignature, FileText, HardHat, LayoutDashboard,
-  ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange,
+  ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange, UserCircle2,
 } from 'lucide-react';
+import { useSessao, type Perfil } from '../lib/sessao';
+import { Badge, Button, Input, Modal } from './ui';
 import { useLookups } from '../lib/lookups';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
@@ -14,16 +16,21 @@ interface NavItem {
   to: string;
   label: string;
   icon: ReactNode;
+  /** perfis que veem o item; ausente = gestor e supervisor */
+  perfis?: Perfil[];
 }
+
+const TODOS: Perfil[] = ['tecnico', 'supervisor', 'gestor'];
 
 const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Operação',
     items: [
       { to: '/', label: 'Painel', icon: <LayoutDashboard size={18} /> },
-      { to: '/agenda', label: 'Agenda', icon: <CalendarDays size={18} /> },
+      { to: '/campo', label: 'Área do técnico', icon: <HardHat size={18} />, perfis: TODOS },
+      { to: '/agenda', label: 'Agenda', icon: <CalendarDays size={18} />, perfis: TODOS },
       { to: '/os', label: 'Ordens de serviço', icon: <ClipboardList size={18} /> },
-      { to: '/ocorrencias', label: 'Ocorrências / chamados', icon: <AlertOctagon size={18} /> },
+      { to: '/ocorrencias', label: 'Ocorrências / chamados', icon: <AlertOctagon size={18} />, perfis: TODOS },
       { to: '/orcamentos', label: 'Orçamentos', icon: <Receipt size={18} /> },
     ],
   },
@@ -31,10 +38,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'PMOC',
     items: [
       { to: '/pmoc', label: 'Documentos PMOC', icon: <FileText size={18} /> },
-      { to: '/cronograma', label: 'Cronograma anual', icon: <CalendarRange size={18} /> },
+      { to: '/cronograma', label: 'Cronograma por equipamento', icon: <CalendarRange size={18} />, perfis: TODOS },
       { to: '/planos', label: 'Planos de manutenção', icon: <ListChecks size={18} /> },
       { to: '/qualidade-ar', label: 'Qualidade do ar', icon: <Snowflake size={18} /> },
-      { to: '/fluidos', label: 'Fluidos refrigerantes', icon: <Factory size={18} /> },
+      { to: '/fluidos', label: 'Fluidos refrigerantes', icon: <Factory size={18} />, perfis: TODOS },
     ],
   },
   {
@@ -43,7 +50,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/clientes', label: 'Clientes', icon: <Users size={18} /> },
       { to: '/unidades', label: 'Unidades', icon: <Building2 size={18} /> },
       { to: '/ambientes', label: 'Ambientes', icon: <MapPin size={18} /> },
-      { to: '/equipamentos', label: 'Equipamentos', icon: <Wind size={18} /> },
+      { to: '/equipamentos', label: 'Equipamentos', icon: <Wind size={18} />, perfis: TODOS },
       { to: '/profissionais', label: 'Profissionais', icon: <HardHat size={18} /> },
       { to: '/servicos', label: 'Serviços', icon: <Wrench size={18} /> },
       { to: '/pecas', label: 'Peças e materiais', icon: <Package size={18} /> },
@@ -56,10 +63,25 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Gestão',
     items: [
       { to: '/relatorios', label: 'Relatórios e indicadores', icon: <BarChart3 size={18} /> },
-      { to: '/configuracoes', label: 'Configurações', icon: <Settings size={18} /> },
+      { to: '/configuracoes', label: 'Configurações', icon: <Settings size={18} />, perfis: ['gestor'] },
     ],
   },
 ];
+
+/** Rotas liberadas por perfil (prefixo da rota → item do menu). */
+function podeVerRota(perfil: Perfil, path: string): boolean {
+  if (perfil === 'gestor') return true;
+  if (path.startsWith('/campo') || path.startsWith('/busca')) return true;
+  if (perfil === 'tecnico' && /^\/equipamentos\/[^/]+$/.test(path)) return true;
+  if (perfil === 'tecnico' && path === '/') return false;
+  const base = '/' + (path.split('/')[1] || '');
+  if (base === '/') return true;
+  if (base === '/etiquetas') return podeVer(perfil, '/equipamentos');
+  if (base === '/pmoc') return podeVer(perfil, '/pmoc');
+  if (base === '/os' || base === '/orcamentos') return podeVer(perfil, '/os');
+  if (base === '/planos') return podeVer(perfil, '/planos');
+  return podeVer(perfil, base);
+}
 
 function useTheme(): [boolean, () => void] {
   const [dark, setDark] = useState(() => {
@@ -82,14 +104,78 @@ function useTheme(): [boolean, () => void] {
   return [dark, () => setDark((d) => !d)];
 }
 
+export const podeVer = (perfil: Perfil, to: string) => {
+  const item = NAV.flatMap((g) => g.items).find((i) => i.to === to);
+  return (item?.perfis || ['gestor', 'supervisor']).includes(perfil);
+};
+
+const PERFIL_LABEL: Record<Perfil, string> = { tecnico: 'Técnico', supervisor: 'Supervisor', gestor: 'Gestor' };
+
+function TrocarUsuario({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { profissionais, empresa } = useLookups();
+  const { usuario, entrar } = useSessao();
+  const [sel, setSel] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
+  const [erro, setErro] = useState('');
+  const navigate = useNavigate();
+  const opcoes = [{ id: 'gestor', nome: 'Gestor (administrador)', perfil: 'gestor' as Perfil, temPin: !!empresa.pinGestor }, ...profissionais.filter((p) => p.ativo).map((p) => ({ id: p.id, nome: p.nome, perfil: (p.perfil || 'tecnico') as Perfil, temPin: !!p.pin }))];
+  const confirmar = (id: string, temPin: boolean) => {
+    if (temPin && sel !== id) {
+      setSel(id);
+      setPin('');
+      setErro('');
+      return;
+    }
+    const e = entrar(id, pin);
+    if (e) {
+      setErro(e);
+      return;
+    }
+    const perfil = opcoes.find((o) => o.id === id)?.perfil;
+    setSel(null);
+    onClose();
+    navigate(perfil === 'tecnico' ? '/campo' : '/');
+  };
+  return (
+    <Modal open={open} onClose={onClose} title="Quem está usando?" size="sm">
+      <p className="mb-3 text-xs text-slate-500">Os lançamentos de execução ficam registrados em nome do usuário. Defina perfil e PIN em Profissionais.</p>
+      <ul className="space-y-1.5">
+        {opcoes.map((o) => (
+          <li key={o.id}>
+            <button type="button" onClick={() => confirmar(o.id, o.temPin)} className={cx('flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm', usuario.id === o.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800')}>
+              <span className="font-medium">{o.nome}</span>
+              <span className="flex items-center gap-1">
+                {o.temPin && <span className="text-[10px] text-slate-500">PIN</span>}
+                <Badge>{PERFIL_LABEL[o.perfil]}</Badge>
+              </span>
+            </button>
+            {sel === o.id && (
+              <form className="mt-1.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); confirmar(o.id, true); }}>
+                <Input type="password" inputMode="numeric" autoFocus placeholder="PIN" value={pin} onChange={(e) => setPin(e.target.value)} />
+                <Button type="submit">Entrar</Button>
+              </form>
+            )}
+            {sel === o.id && erro && <p className="mt-1 text-xs text-rose-600">{erro}</p>}
+          </li>
+        ))}
+      </ul>
+    </Modal>
+  );
+}
+
 export default function Layout() {
   const [open, setOpen] = useState(false);
   const [dark, toggle] = useTheme();
   const { empresa } = useLookups();
+  const { usuario } = useSessao();
+  const [trocar, setTrocar] = useState(false);
   const loc = useLocation();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    if (usuario.perfil === 'tecnico' && loc.pathname === '/') navigate('/campo', { replace: true });
+  }, [usuario.perfil, loc.pathname, navigate]);
   const demo = useLiveQuery(async () => (await db.settings.get('demo'))?.value === true, [], false);
 
   const sidebar = (
@@ -108,7 +194,7 @@ export default function Layout() {
         </div>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-2 pb-4">
-        {NAV.map((g) => (
+        {NAV.map((g) => ({ ...g, items: g.items.filter((i) => podeVer(usuario.perfil, i.to)) })).filter((g) => g.items.length).map((g) => (
           <div key={g.group}>
             <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{g.group}</p>
             {g.items.map((i) => (
@@ -169,9 +255,16 @@ export default function Layout() {
             />
           </form>
           <div className="flex-1" />
-          <NavLink to="/os/nova" className="hidden items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800 sm:inline-flex">
-            <ClipboardCheck size={16} /> Nova OS
-          </NavLink>
+          {usuario.perfil !== 'tecnico' && (
+            <NavLink to="/os/nova" className="hidden items-center gap-1.5 rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800 sm:inline-flex">
+              <ClipboardCheck size={16} /> Nova OS
+            </NavLink>
+          )}
+          <button className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800" onClick={() => setTrocar(true)} title="Trocar usuário" aria-label="Trocar usuário">
+            <UserCircle2 size={20} />
+            <span className="hidden max-w-[140px] truncate md:inline">{usuario.nome}</span>
+            <Badge className="hidden bg-brand-50 text-brand-800 dark:bg-brand-950 dark:text-brand-200 sm:inline-flex">{PERFIL_LABEL[usuario.perfil]}</Badge>
+          </button>
           <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
@@ -183,8 +276,17 @@ export default function Layout() {
           </div>
         )}
         <main className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6">
-          <Outlet />
+          {podeVerRota(usuario.perfil, loc.pathname) ? (
+            <Outlet />
+          ) : (
+            <div className="mx-auto mt-10 max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900">
+              <p className="font-semibold">Acesso restrito ao perfil {usuario.perfil === 'tecnico' ? 'supervisor/gestor' : 'gestor'}</p>
+              <p className="mt-1 text-sm text-slate-500">Troque de usuário no menu superior ou volte à sua área.</p>
+              <NavLink to={usuario.perfil === 'tecnico' ? '/campo' : '/'} className="mt-3 inline-block text-sm font-medium text-brand-700 underline dark:text-brand-300">Ir para minha área</NavLink>
+            </div>
+          )}
         </main>
+        <TrocarUsuario open={trocar} onClose={() => setTrocar(false)} />
       </div>
     </div>
   );
