@@ -2,13 +2,26 @@ import { useEffect, useState } from 'react';
 import { ClipboardCheck, Database, Rocket, ShieldCheck, Snowflake, Wind } from 'lucide-react';
 import { isInitialized, markInitialized, seedDemo } from '../db/seed';
 import { Button, Modal } from './ui';
+import { AUTO_DEMO } from '../lib/env';
+
+let autoIniciado = false;
 
 /** Tela de boas-vindas no primeiro acesso: começar do zero ou carregar a demonstração. */
 export default function Welcome() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    isInitialized().then((ok) => setOpen(!ok));
+    isInitialized()
+      .then(async (ok) => {
+        if (ok) return;
+        if (AUTO_DEMO) {
+          if (autoIniciado) return;
+          autoIniciado = true;
+          await seedDemo();
+        }
+        else setOpen(true);
+      })
+      .catch(() => {});
   }, []);
   const demo = async () => {
     setBusy(true);

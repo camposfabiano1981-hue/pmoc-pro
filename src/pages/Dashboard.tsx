@@ -49,7 +49,7 @@ export default function Dashboard() {
     <div>
       <PageHeader title="Painel de controle" subtitle={`${l.empresa.fantasia || l.empresa.razaoSocial} · ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}`} icon={<LayoutDashboard size={20} />} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Link to="/os"><Stat label="OS em aberto" value={d.abertas.length} hint={`${d.emExec.length} em execução · ${d.hoje.length} hoje`} icon={<ClipboardList size={18} />} /></Link>
         <Link to="/os?status=atrasadas"><Stat label="OS atrasadas" value={d.atrasadas.length} tone={d.atrasadas.length ? 'red' : 'green'} icon={<Clock size={18} />} hint="Prazo/SLA vencido" /></Link>
         <Link to="/cronograma"><Stat label="Cumprimento PMOC" value={d.cumpAtual !== null ? `${d.cumpAtual}%` : '—'} tone={d.cumpAtual === null || d.cumpAtual >= 90 ? 'green' : d.cumpAtual >= 70 ? 'amber' : 'red'} icon={<CheckCircle2 size={18} />} hint="Meses encerrados (12 meses)" /></Link>

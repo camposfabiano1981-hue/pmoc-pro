@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import Welcome from './components/Welcome';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider, ToastProvider } from './components/ui';
 import { EntityPage } from './components/crud';
 import { LookupsProvider } from './lib/lookups';
@@ -24,6 +25,7 @@ import Busca from './pages/Busca';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <ToastProvider>
       <ConfirmProvider>
         <LookupsProvider>
@@ -69,5 +71,6 @@ export default function App() {
         </LookupsProvider>
       </ConfirmProvider>
     </ToastProvider>
+    </ErrorBoundary>
   );
 }

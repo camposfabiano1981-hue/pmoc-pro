@@ -5,6 +5,9 @@ import {
   ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange,
 } from 'lucide-react';
 import { useLookups } from '../lib/lookups';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db/db';
+import { Link } from 'react-router-dom';
 import { cx } from './ui';
 
 interface NavItem {
@@ -61,7 +64,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
 function useTheme(): [boolean, () => void] {
   const [dark, setDark] = useState(() => {
     try {
-      const s = localStorage.getItem('pmoc-theme');
+      const s = localStorage.getItem('pmoc-theme') || document.documentElement.getAttribute('data-theme');
       if (s) return s === 'dark';
     } catch {
       /* armazenamento indisponível */
@@ -87,6 +90,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   useEffect(() => setOpen(false), [loc.pathname]);
+  const demo = useLiveQuery(async () => (await db.settings.get('demo'))?.value === true, [], false);
 
   const sidebar = (
     <nav className="flex h-full flex-col">
@@ -172,6 +176,12 @@ export default function Layout() {
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         </header>
+        {demo && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 print:hidden dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            Você está vendo <b>dados fictícios de demonstração</b>. Para usar com seus dados, vá em{' '}
+            <Link to="/configuracoes" className="font-semibold underline">Configurações → Backup e dados → Apagar todos os dados</Link>.
+          </div>
+        )}
         <main className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6">
           <Outlet />
         </main>

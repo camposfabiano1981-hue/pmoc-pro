@@ -6,7 +6,7 @@ import './index.css';
 
 // aplica o tema salvo antes do primeiro render (evita "piscar")
 try {
-  const t = localStorage.getItem('pmoc-theme');
+  const t = localStorage.getItem('pmoc-theme') || document.documentElement.getAttribute('data-theme');
   const dark = t ? t === 'dark' : window.matchMedia?.('(prefers-color-scheme: dark)').matches;
   document.documentElement.classList.toggle('dark', !!dark);
 } catch {

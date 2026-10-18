@@ -253,6 +253,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setItems((x) => [...x, { id, kind, text }]);
     setTimeout(() => setItems((x) => x.filter((t) => t.id !== id)), kind === 'error' ? 6000 : 3500);
   }, []);
+  useEffect(() => {
+    const h = (e: Event) => push(String((e as CustomEvent).detail), 'info');
+    window.addEventListener('pmoc-aviso', h);
+    return () => window.removeEventListener('pmoc-aviso', h);
+  }, [push]);
   const icons = { success: <CheckCircle2 size={18} className="text-emerald-500" />, error: <XCircle size={18} className="text-rose-500" />, info: <Info size={18} className="text-sky-500" />, warning: <AlertTriangle size={18} className="text-amber-500" /> };
   return (
     <ToastCtx.Provider value={push}>

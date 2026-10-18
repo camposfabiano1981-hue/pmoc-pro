@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 import { Camera, Eraser, ImagePlus, Printer, Trash2 } from 'lucide-react';
 import { uid } from '../db/db';
+import { imprimir } from '../lib/env';
 import type { Empresa, Foto, ItemPeca, ItemServico } from '../db/types';
 import { compressImage, money, n2 } from '../lib/format';
 import { useLookups } from '../lib/lookups';
@@ -338,7 +339,7 @@ export function PrintToolbar({ title, children }: { title: string; children?: Re
       <h1 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h1>
       <div className="flex flex-wrap gap-2">
         {children}
-        <Button icon={<Printer size={16} />} onClick={() => window.print()}>
+        <Button icon={<Printer size={16} />} onClick={imprimir}>
           Imprimir / Salvar PDF
         </Button>
       </div>

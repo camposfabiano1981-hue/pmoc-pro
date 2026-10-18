@@ -407,5 +407,6 @@ export async function seedDemo(): Promise<void> {
   ];
   await db.fluidos.bulkAdd(fl);
 
+  await setSetting('demo', true);
   await markInitialized();
 }

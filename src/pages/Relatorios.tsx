@@ -11,6 +11,7 @@ import { addDays, diffDays, diffHours, fmtHoras, money, n2, todayStr } from '../
 import { gwpDe } from '../lib/catalogs';
 import { exportXlsx } from '../lib/excel';
 import { horasTrabalhadas } from '../lib/osHelpers';
+import { imprimir } from '../lib/env';
 
 export default function Relatorios() {
   const l = useLookups();
@@ -108,7 +109,7 @@ export default function Relatorios() {
         icon={<BarChart3 size={20} />}
         actions={
           <>
-            <Button variant="outline" icon={<Printer size={16} />} onClick={() => window.print()}>Imprimir</Button>
+            <Button variant="outline" icon={<Printer size={16} />} onClick={imprimir}>Imprimir</Button>
             <Button icon={<FileSpreadsheet size={16} />} onClick={exportar}>Exportar Excel</Button>
           </>
         }

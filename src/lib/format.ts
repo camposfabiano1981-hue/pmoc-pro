@@ -1,3 +1,5 @@
+import { IS_EMBED, aviso } from './env';
+
 export const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 export const MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -138,6 +140,10 @@ export function norm(s: unknown): string {
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
+  if (IS_EMBED) {
+    aviso('Downloads (Excel, CSV, backup) ficam disponíveis na versão instalada (GitHub Pages).');
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
