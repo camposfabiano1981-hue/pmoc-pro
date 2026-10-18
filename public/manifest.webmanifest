@@ -1,0 +1,11 @@
+{
+  "name": "PMOC Pro — Gestão de Manutenção HVAC-R",
+  "short_name": "PMOC Pro",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0e7490",
+  "lang": "pt-BR",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

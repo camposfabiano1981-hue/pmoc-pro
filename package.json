@@ -1,0 +1,38 @@
+{
+  "name": "pmoc-pro",
+  "private": true,
+  "version": "1.0.0",
+  "description": "PMOC Pro — Plataforma web de Plano de Manutenção, Operação e Controle (Lei 13.589/2018, Portaria GM/MS 3.523/98, RE ANVISA 09/2003, ABNT NBR 13971) com OS, estoque, profissionais e relatórios.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "chart.js": "4.4.6",
+    "dexie": "4.0.10",
+    "dexie-react-hooks": "1.1.7",
+    "exceljs": "4.4.0",
+    "lucide-react": "0.460.0",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-chartjs-2": "5.2.0",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.28.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "1.5.5",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.15",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.5"
+  }
+}
