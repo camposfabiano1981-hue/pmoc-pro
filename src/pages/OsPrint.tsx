@@ -2,14 +2,15 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { Medicoes } from '../db/types';
 import { db } from '../db/db';
-import { Button } from '../components/ui';
+import { Button, cx } from '../components/ui';
 import { PrintHeader, PrintPage, PrintToolbar, appUrl, totais } from '../components/widgets';
 import { useLookups } from '../lib/lookups';
 import { periodicidadeSigla, prioridade, statusOs } from '../lib/catalogs';
 import { diffHours, fmtBtu, fmtDate, fmtDateTime, fmtHoras, money, n2 } from '../lib/format';
-import { tempoPrevisto } from '../lib/osHelpers';
-import { diagnosticar } from '../lib/hvac';
+import { MEDICOES_CAMPOS, tempoPrevisto } from '../lib/osHelpers';
+import { diagnosticar, type Diagnostico } from '../lib/hvac';
 import { statusItem } from '../lib/rotinas';
 
 const COND: Record<string, string> = { ok: 'Conforme', nok: 'Não conforme', corrigido: 'Corrigido', na: 'N/A', '': '' };
@@ -140,7 +141,6 @@ export default function OsPrint() {
         {os.equipamentos.map((it) => {
           const eq = l.equipamentoMap.get(it.equipamentoId);
           const d = diagnosticar(it.medicoes, eq?.fluido, eq?.correnteNominal, eq?.tensao);
-          const meds = Object.entries(it.medicoes).filter(([, x]) => x);
           return (
             <div key={it.equipamentoId} className="break-inside-avoid">
               <div className="border border-t-0 border-slate-400 bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold">
@@ -194,15 +194,7 @@ export default function OsPrint() {
                   {branco && linhasBranco(2, 9)}
                 </tbody>
               </table>
-              {!branco && (meds.length > 0 || d.deltaT !== undefined) && (
-                <p className="border border-t-0 border-slate-400 px-1.5 py-0.5 text-[10.5px]">
-                  <b>Medições:</b> {meds.map(([k, x]) => `${k}: ${x}`).join(' · ')}
-                  {d.deltaT !== undefined && ` · ΔT ${n2(d.deltaT)} K`}
-                  {d.superaquecimento !== undefined && ` · SH ${n2(d.superaquecimento)} K`}
-                  {d.subresfriamento !== undefined && ` · SC ${n2(d.subresfriamento)} K`}
-                </p>
-              )}
-              {branco && <p className="border border-t-0 border-slate-400 px-1.5 py-1 text-[10.5px]"><b>Medições:</b> Tensão ____ V · Corrente ____ A · T. retorno ____ °C · T. insuflamento ____ °C · P. sucção ____ psig · T. linha sucção ____ °C</p>}
+              <MedicoesImpressas medicoes={it.medicoes} d={d} branco={branco} fluido={eq?.fluido} tensaoNominal={eq?.tensao} correnteNominal={eq?.correnteNominal} />
               {!branco && it.obs && <p className="border border-t-0 border-slate-400 px-1.5 py-0.5 text-[10.5px]"><b>Obs.:</b> {it.obs}</p>}
             </div>
           );
@@ -350,6 +342,67 @@ export default function OsPrint() {
         </table>
         <p className="mt-3 border-t border-slate-200 pt-1 text-center text-[10px] text-slate-500">{e.rodape} · Impresso em {new Date().toLocaleString('pt-BR')}</p>
       </PrintPage>
+    </div>
+  );
+}
+
+/** Bloco de medições de campo e diagnóstico (preenchido ou em branco para anotação em campo). */
+function MedicoesImpressas({ medicoes, d, branco, fluido, tensaoNominal, correnteNominal }: { medicoes: Medicoes; d: Diagnostico; branco: boolean; fluido?: string; tensaoNominal?: string; correnteNominal?: number }) {
+  const cel = 'border border-slate-400 px-1 py-0.5 align-top';
+  const val = (x?: string | number) => (branco ? '' : x === undefined || x === '' ? '—' : String(x));
+  const nominal: Partial<Record<keyof Medicoes, string>> = {
+    tensao: tensaoNominal ? `nominal ${tensaoNominal}` : undefined,
+    corrente: correnteNominal ? `nominal ${n2(correnteNominal)} A` : undefined,
+  };
+  const preenchidas = MEDICOES_CAMPOS.filter((c) => medicoes[c.key]).length;
+  const calc: { label: string; ref: string; v?: number; un: string }[] = [
+    { label: 'ΔT retorno − insuflamento', ref: 'ref. 8 a 14 K', v: d.deltaT, un: 'K' },
+    { label: 'T. saturação sucção', ref: fluido ? `pela P×T do ${fluido}` : 'pela P×T do fluido', v: d.tSatSuccao, un: '°C' },
+    { label: 'Superaquecimento', ref: 'ref. 4 a 14 K', v: d.superaquecimento, un: 'K' },
+    { label: 'T. saturação descarga', ref: fluido ? `pela P×T do ${fluido}` : 'pela P×T do fluido', v: d.tSatDescarga, un: '°C' },
+    { label: 'Sub-resfriamento', ref: 'ref. 3 a 12 K', v: d.subresfriamento, un: 'K' },
+    { label: 'Corrente × nominal', ref: 'ref. até 110%', v: d.cargaPct, un: '%' },
+  ];
+  return (
+    <div className="break-inside-avoid text-[10px]">
+      <div className="border border-t-0 border-slate-400 bg-orange-100 px-1.5 py-0.5 text-center font-bold">MEDIÇÕES DE CAMPO E DIAGNÓSTICO{fluido ? ` — fluido ${fluido}` : ''}</div>
+      <table className="w-full table-fixed border-collapse">
+        <tbody>
+          {[MEDICOES_CAMPOS.slice(0, 5), MEDICOES_CAMPOS.slice(5)].map((linha, i) => (
+            <tr key={i}>
+              {linha.map((c) => (
+                <td key={c.key} className={cel}>
+                  <span className="block text-[9px] text-slate-600">{c.label} ({c.unidade}){nominal[c.key] && <> · {nominal[c.key]}</>}</span>
+                  <span className={cx('block text-[11px] font-bold', branco ? 'h-6' : 'h-4')}>{val(medicoes[c.key])}</span>
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={5} className="p-0">
+              <table className="w-full table-fixed border-collapse">
+                <tbody>
+                  <tr>
+                    {calc.map((c) => (
+                      <td key={c.label} className={cel + ' bg-slate-50'}>
+                        <span className="block text-[9px] text-slate-600">{c.label} <span className="text-slate-500">({c.ref})</span></span>
+                        <span className={cx('block text-[11px] font-bold', branco ? 'h-6' : 'h-4')}>{branco ? '' : c.v === undefined ? '—' : `${n2(c.v)} ${c.un}`}</span>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      {!branco && (
+        <p className={cx('border border-t-0 border-slate-400 px-1.5 py-0.5', d.alertas.length ? 'text-rose-800' : 'text-slate-700')}>
+          <b>Diagnóstico:</b>{' '}
+          {!preenchidas ? 'medições não registradas nesta OS.' : d.alertas.length ? d.alertas.join(' ') : 'parâmetros medidos dentro das faixas de referência.'}
+        </p>
+      )}
+      {branco && <p className="border border-t-0 border-slate-400 px-1.5 py-1"><b>Diagnóstico / observações:</b> ____________________________________________________________________________________________</p>}
     </div>
   );
 }
