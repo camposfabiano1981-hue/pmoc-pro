@@ -462,7 +462,7 @@ export default function OsEdit() {
                   </Select>
                 </Field>
                 <Field label="Data agendada">
-                  <Input type="date" value={os.dataAgendada || ''} onChange={(e) => upd({ dataAgendada: e.target.value })} disabled={readOnly} />
+                  <Input type="date" value={os.dataAgendada || ''} onChange={(e) => upd({ dataAgendada: e.target.value, dataOriginal: os.dataOriginal || (os.origem === 'preventiva' ? os.dataAgendada : undefined) })} disabled={readOnly} />
                 </Field>
                 <Field label="Prazo de entrega" help={contrato ? `SLA do contrato ${contrato.numero}` : 'Pela prioridade'}>
                   <Input type="date" value={os.prazo || ''} onChange={(e) => upd({ prazo: e.target.value })} disabled={readOnly} />

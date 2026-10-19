@@ -1,7 +1,7 @@
 import { db, getSetting, nowIso, setSetting, uid } from '../db/db';
 import type { Equipamento, Execucao, ItemChecklist, OS, PlanoManutencao, Rotina } from '../db/types';
 import { diasDaPeriodicidade } from './catalogs';
-import { addDays, diffDays, todayStr } from './format';
+import { addDays, dateStr, diffDays, todayStr } from './format';
 
 /** Cria as rotinas de um equipamento a partir de um plano modelo. */
 export function rotinasDoPlano(eq: Equipamento, plano: PlanoManutencao, inicio: string): Rotina[] {
@@ -85,6 +85,19 @@ export async function sincronizarPlanoNosEquipamentos(planoId: string): Promise<
   return eqs.length;
 }
 
+/**
+ * Próxima data a partir de uma execução. Intervalos múltiplos de 30 dias (mensal, bimestral,
+ * trimestral, quadrimestral, semestral) e o anual (365) avançam por mês de calendário, para que
+ * uma rotina mensal caia em todos os meses do cronograma; os demais avançam em dias.
+ */
+export function proximaData(d: string, intervaloDias: number): string {
+  const meses = intervaloDias === 365 ? 12 : intervaloDias >= 30 && intervaloDias % 30 === 0 ? intervaloDias / 30 : 0;
+  if (!meses) return addDays(d, intervaloDias);
+  const [a, m, dia] = d.slice(0, 10).split('-').map(Number);
+  const ultimoDia = new Date(a, m - 1 + meses + 1, 0).getDate();
+  return dateStr(new Date(a, m - 1 + meses, Math.min(dia, ultimoDia)));
+}
+
 /** Datas previstas da rotina dentro do intervalo [de, ate] a partir da próxima execução. */
 export function projetar(r: Rotina, de: string, ate: string): string[] {
   if (!r.ativa || !r.proximaExecucao || r.intervaloDias <= 0) return [];
@@ -94,7 +107,7 @@ export function projetar(r: Rotina, de: string, ate: string): string[] {
   // quando vencida, a projeção continua a partir da data devida (atraso aparece no próprio dia devido)
   while (d <= ate && guard++ < 800) {
     if (d >= de) out.push(d);
-    d = addDays(d, r.intervaloDias);
+    d = proximaData(d, r.intervaloDias);
   }
   return out;
 }
@@ -159,7 +172,7 @@ export async function recalcularRotinas(ids: string[]): Promise<void> {
     if (!r) continue;
     const ult = ultima.get(r.id);
     if (ult === r.ultimaExecucao) continue;
-    updates.push(ult ? { ...r, ultimaExecucao: ult, proximaExecucao: addDays(ult, r.intervaloDias), reprogramada: false, updatedAt: ts } : { ...r, ultimaExecucao: undefined, updatedAt: ts });
+    updates.push(ult ? { ...r, ultimaExecucao: ult, proximaExecucao: proximaData(ult, r.intervaloDias), reprogramada: false, updatedAt: ts } : { ...r, ultimaExecucao: undefined, updatedAt: ts });
   }
   if (updates.length) await db.rotinas.bulkPut(updates);
 }

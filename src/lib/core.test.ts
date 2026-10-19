@@ -1,4 +1,7 @@
-import { projetar, rotinasDoPlano, statusRotina } from './rotinas';
+import { projetar, proximaData, rotinasDoPlano, statusRotina } from './rotinas';
+import { marcarRotina } from './marcas';
+import { inteiroPorExtenso, valorPorExtenso } from './extenso';
+import { clausulasContrato, mesesVigencia, ordinal } from './contrato';
 import type { Equipamento, Rotina } from '../db/types';
 import { describe, expect, it } from 'vitest';
 import { isDue, monthIndex, matrizAnual, foraDaFaixa } from './schedule';
@@ -87,12 +90,68 @@ describe('rotinas por equipamento', () => {
     expect(rs.every((r) => r.proximaExecucao === '2026-01-01')).toBe(true);
   });
   it('projeta datas a partir da próxima execução', () => {
-    expect(projetar(rot({}), '2026-01-01', '2026-03-31')).toEqual(['2026-01-10', '2026-02-09', '2026-03-11']);
+    expect(projetar(rot({}), '2026-01-01', '2026-03-31')).toEqual(['2026-01-10', '2026-02-10', '2026-03-10']);
+    expect(projetar(rot({ intervaloDias: 15 }), '2026-01-01', '2026-01-31')).toEqual(['2026-01-10', '2026-01-25']);
     expect(projetar(rot({ ativa: false }), '2026-01-01', '2026-03-31')).toEqual([]);
+  });
+  it('mensal, trimestral e anual avançam por mês de calendário', () => {
+    expect(proximaData('2026-01-31', 30)).toBe('2026-02-28');
+    expect(proximaData('2026-11-15', 90)).toBe('2027-02-15');
+    expect(proximaData('2026-02-10', 365)).toBe('2027-02-10');
+    expect(proximaData('2026-02-10', 7)).toBe('2026-02-17');
   });
   it('classifica a situação da rotina', () => {
     expect(statusRotina(rot({ proximaExecucao: '2026-01-05' }), '2026-01-10')).toBe('vencida');
     expect(statusRotina(rot({ proximaExecucao: '2026-01-12' }), '2026-01-10')).toBe('a_vencer');
     expect(statusRotina(rot({ proximaExecucao: '2026-03-01' }), '2026-01-10')).toBe('em_dia');
+  });
+});
+
+describe('legenda de cores (programado / reprogramado / executado / não executado)', () => {
+  const r: Rotina = { id: 'r1', createdAt: '', updatedAt: '', equipamentoId: 'eq1', grupo: '', descricao: 'Limpar filtros', tipo: 'check', periodicidade: 'mensal', intervaloDias: 30, tempoMin: 10, proximaExecucao: '2026-03-10', ativa: true };
+  const mes = (d: string) => d.slice(0, 7);
+  it('data futura é programada, data passada sem execução é não executada', () => {
+    const m = marcarRotina(r, { de: '2026-01-01', ate: '2026-05-31', hoje: '2026-04-15', chave: mes });
+    expect(m['2026-03'].m).toBe('N');
+    expect(m['2026-04'].m).toBe('N');
+    expect(m['2026-05'].m).toBe('P');
+  });
+  it('reprogramada fica amarela e execução prevalece', () => {
+    const m = marcarRotina({ ...r, reprogramada: true }, { de: '2026-03-01', ate: '2026-03-31', hoje: '2026-03-01' });
+    expect(m['2026-03-10'].m).toBe('R');
+    const e = marcarRotina(r, { de: '2026-03-01', ate: '2026-03-31', hoje: '2026-03-20', chave: mes, execs: [{ id: 'x', createdAt: '', updatedAt: '', rotinaId: 'r1', equipamentoId: 'eq1', data: '2026-03-12', status: 'E' }] });
+    expect(e['2026-03'].m).toBe('E');
+  });
+  it('OS aberta representa a data devida; OS com data alterada é reprogramada', () => {
+    const m = marcarRotina(r, { de: '2026-03-01', ate: '2026-03-31', hoje: '2026-03-01', programadas: [{ osId: 'o', numero: 'OS-1', data: '2026-03-15', reprogramada: true }] });
+    expect(m['2026-03-10']).toBeUndefined();
+    expect(m['2026-03-15'].m).toBe('R');
+  });
+});
+
+describe('contrato', () => {
+  it('escreve valores por extenso', () => {
+    expect(valorPorExtenso(1530.5)).toBe('mil quinhentos e trinta reais e cinquenta centavos');
+    expect(valorPorExtenso(2500)).toBe('dois mil e quinhentos reais');
+    expect(valorPorExtenso(1)).toBe('um real');
+    expect(valorPorExtenso(101)).toBe('cento e um reais');
+    expect(valorPorExtenso(1_000_000)).toBe('um milhão de reais');
+    expect(valorPorExtenso(6800)).toBe('seis mil e oitocentos reais');
+    expect(inteiroPorExtenso(12)).toBe('doze');
+  });
+  it('calcula meses de vigência e ordinais', () => {
+    expect(mesesVigencia('2026-01-01', '2026-12-31')).toBe(12);
+    expect(mesesVigencia('2026-03-15', '2027-03-14')).toBe(12);
+    expect(ordinal(0)).toBe('PRIMEIRA');
+    expect(ordinal(11)).toBe('DÉCIMA SEGUNDA');
+  });
+  it('monta cláusulas do modelo particular e do público', () => {
+    const base = { id: 'c', createdAt: '', updatedAt: '', numero: 'CT-1', clienteId: 'x', objeto: 'Manutenção', inicio: '2026-01-01', fim: '2026-12-31', valorMensal: 1000, status: 'ativo' as const };
+    const priv = clausulasContrato({ ct: base, empresa: { razaoSocial: 'Empresa' } });
+    expect(priv.some((c) => c.titulo === 'DA RESCISÃO')).toBe(true);
+    expect(priv.find((c) => c.titulo === 'DO PREÇO E DO PAGAMENTO')!.paragrafos[0].t).toContain('mil reais');
+    const pub = clausulasContrato({ ct: { ...base, modelo: 'publico' }, empresa: { razaoSocial: 'Empresa' } });
+    expect(pub.some((c) => c.titulo === 'DA GESTÃO E FISCALIZAÇÃO')).toBe(true);
+    expect(pub.map((c) => c.paragrafos.map((p) => p.t).join(' ')).join(' ')).toContain('14.133/2021');
   });
 });

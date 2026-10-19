@@ -56,7 +56,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Link to="/os"><Stat label="OS em aberto" value={d.abertas.length} hint={`${d.emExec.length} em execução · ${d.hoje.length} hoje`} icon={<ClipboardList size={18} />} /></Link>
         <Link to="/os?status=atrasadas"><Stat label="OS atrasadas" value={d.atrasadas.length} tone={d.atrasadas.length ? 'red' : 'green'} icon={<Clock size={18} />} hint="Prazo/SLA vencido" /></Link>
-        <Link to="/cronograma"><Stat label="Cumprimento PMOC" value={d.cumpAtual !== null ? `${d.cumpAtual}%` : '—'} tone={d.cumpAtual === null || d.cumpAtual >= 90 ? 'green' : d.cumpAtual >= 70 ? 'amber' : 'red'} icon={<CheckCircle2 size={18} />} hint={`Meses encerrados · ${d.rotinasVencidas} de ${d.rotinasAtivas} rotinas vencidas`} /></Link>
+        <Link to="/preventivas"><Stat label="Cumprimento PMOC" value={d.cumpAtual !== null ? `${d.cumpAtual}%` : '—'} tone={d.cumpAtual === null || d.cumpAtual >= 90 ? 'green' : d.cumpAtual >= 70 ? 'amber' : 'red'} icon={<CheckCircle2 size={18} />} hint={`Meses encerrados · ${d.rotinasVencidas} de ${d.rotinasAtivas} rotinas vencidas`} /></Link>
         <Stat label="MTTR corretivas" value={d.mttr !== null ? `${Math.round(d.mttr)} h` : '—'} tone="violet" icon={<Timer size={18} />} hint={`SLA cumprido: ${d.sla !== null ? d.sla + '%' : '—'}`} />
         <Link to="/equipamentos"><Stat label="Equipamentos" value={l.equipamentos.length} hint={`${fmtTr(capTotal)} instalados`} icon={<Wind size={18} />} tone="brand" /></Link>
         <Stat label="Disponibilidade" value={`${disponibilidade}%`} hint={`${operando} operando`} icon={<Gauge size={18} />} tone={disponibilidade >= 95 ? 'green' : 'amber'} />

@@ -6,11 +6,11 @@ import type { EntityConfig } from '../components/crud';
 import { Badge, Button, IconButton, Select, cx } from '../components/ui';
 import { PrintPage, PrintToolbar, QRImage, appUrl } from '../components/widgets';
 import { db } from '../db/db';
-import type { Pmoc, Rotina } from '../db/types';
-import { NORMAS, RECOMENDACOES_PADRAO, RE09, TERMO_RT, periodicidadeLabel, statusOs } from '../lib/catalogs';
+import type { Pmoc } from '../db/types';
+import { NORMAS, RECOMENDACOES_PADRAO, RE09, TERMO_RT, diasDaPeriodicidade, periodicidadeLabel, statusOs } from '../lib/catalogs';
 import { MESES_CURTOS, btuToTr, dateStr, fmtBtu, fmtDate, n2, todayStr } from '../lib/format';
 import { useLookups } from '../lib/lookups';
-import { projetar } from '../lib/rotinas';
+import { MARCAS, ORDEM_MARCAS, marcarRotina, programacoesAbertas } from '../lib/marcas';
 import { avaliarAnalise, vencBadge } from '../modules/entities';
 
 const STATUS_PMOC = [
@@ -79,6 +79,20 @@ export const pmocsCfg: EntityConfig = {
 };
 
 /* ===================== Documento PMOC (impressão) ===================== */
+export function LegendaMarcas({ className }: { className?: string }) {
+  return (
+    <div className={cx('mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]', className)}>
+      <b className="uppercase">Legenda:</b>
+      {ORDEM_MARCAS.map((k) => (
+        <span key={k} className="inline-flex items-center gap-1" title={MARCAS[k].desc}>
+          <span className="inline-flex h-4 w-5 items-center justify-center rounded-sm text-[9px] font-bold" style={{ backgroundColor: MARCAS[k].cor, color: MARCAS[k].texto }}>{k}</span>
+          {MARCAS[k].label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Sec({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
     <section className="mt-5">
@@ -118,12 +132,8 @@ export function PmocDocumento() {
   const cicloAte = dateStr(new Date(meses12[11].ano, meses12[11].m + 1, 0));
   const hoje = todayStr();
   const execCiclo = execucoes.filter((e) => e.data >= cicloDe && e.data <= cicloAte);
-  const marcasCiclo = (r: Rotina): Record<string, string> => {
-    const m: Record<string, string> = {};
-    for (const d of projetar(r, cicloDe, cicloAte)) m[d.slice(0, 7)] = d === r.proximaExecucao && d < hoje ? '!' : 'X';
-    for (const e of execCiclo) if (e.rotinaId === r.id) m[e.data.slice(0, 7)] = e.status === 'E' ? 'E' : m[e.data.slice(0, 7)] === 'E' ? 'E' : e.status;
-    return m;
-  };
+  const progs = programacoesAbertas(osList);
+  const mes = (d: string) => d.slice(0, 7);
   const anUnidade = analises.filter((a) => a.unidadeId === pmoc.unidadeId).sort((a, b) => b.data.localeCompare(a.data));
   const prevs = osList.filter((o) => o.pmocId === pmoc.id && o.tipo === 'Preventiva').sort((a, b) => (a.dataAgendada || '').localeCompare(b.dataAgendada || ''));
   const td = 'border border-slate-300 px-1.5 py-0.5';
@@ -254,8 +264,8 @@ export function PmocDocumento() {
         <Sec n="6" title="Plano de manutenção e controle — por equipamento">
           <p className="mb-2 text-[10px] text-slate-600">
             Periodicidade controlada individualmente por equipamento: a próxima execução de cada rotina é calculada a partir da última execução registrada pela equipe técnica.
-            Legenda: <b>X</b> previsto · <b>E</b> executado · <b>N</b> não executado · <b>!</b> vencido.
           </p>
+          <LegendaMarcas />
           {eqs.map((x) => {
             const rots = rotinas.filter((r) => r.equipamentoId === x.id && r.ativa).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
             if (!rots.length) return null;
@@ -277,14 +287,22 @@ export function PmocDocumento() {
                   </thead>
                   <tbody>
                     {rots.map((r) => {
-                      const marcas = marcasCiclo(r);
+                      const marcas = marcarRotina(r, { de: cicloDe, ate: cicloAte, hoje, execs: execCiclo, programadas: progs.get(r.id), chave: mes });
                       return (
                         <tr key={r.id}>
                           <td className={td}>{r.descricao}</td>
-                          <td className={cx(td, 'whitespace-nowrap text-center')}>{periodicidadeLabel(r.periodicidade)} ({r.intervaloDias} d)</td>
+                          <td className={cx(td, 'whitespace-nowrap text-center')}>{periodicidadeLabel(r.periodicidade)}{r.intervaloDias !== diasDaPeriodicidade(r.periodicidade) && ` (${r.intervaloDias} d)`}</td>
                           <td className={cx(td, 'whitespace-nowrap text-center')}>{r.ultimaExecucao ? fmtDate(r.ultimaExecucao) : '—'}</td>
                           <td className={cx(td, 'whitespace-nowrap text-center', r.proximaExecucao < hoje && 'font-bold text-rose-700')}>{fmtDate(r.proximaExecucao)}</td>
-                          {meses12.map((mm) => <td key={mm.idx} className={cx(td, 'text-center font-bold', marcas[mm.key] === '!' && 'text-rose-700', marcas[mm.key] === 'E' && 'text-emerald-700')}>{marcas[mm.key] || ''}</td>)}
+                          {meses12.map((mm) => {
+                            const mk = marcas[mm.key];
+                            const st = mk ? MARCAS[mk.m] : undefined;
+                            return (
+                              <td key={mm.idx} title={mk?.info.join(' · ')} className={cx(td, 'text-center font-bold')} style={st ? { backgroundColor: st.cor, color: st.texto } : undefined}>
+                                {mk?.m || ''}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })}

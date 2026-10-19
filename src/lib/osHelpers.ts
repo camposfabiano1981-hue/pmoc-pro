@@ -1,7 +1,7 @@
 import { db, movimentarEstoque, nextNumber, nowIso, uid } from '../db/db';
 import type { Contrato, OS, Prioridade } from '../db/types';
 import { OS_FINALIZADAS, PRIORIDADES } from './catalogs';
-import { addHours, dateStr, diffHours, localDateTimeStr, todayStr } from './format';
+import { addHours, dateStr, diffHours, fmtDate, localDateTimeStr, todayStr } from './format';
 import { estornarExecucoesDaOS, registrarExecucoesDaOS, statusItem } from './rotinas';
 
 export function prazoSla(prioridade: Prioridade, contrato?: Contrato, base = new Date()): string {
@@ -129,6 +129,14 @@ export async function reabrirOS(os: OS, usuario?: string): Promise<OS> {
   await db.os.put({ ...o, updatedAt: nowIso() });
   await estornarExecucoesDaOS(o.id);
   return o;
+}
+
+/** Altera a data agendada mantendo a data original (a OS passa a contar como reprogramada). */
+export async function reprogramarOS(id: string, data: string, usuario?: string, motivo?: string): Promise<void> {
+  const os = await db.os.get(id);
+  if (!os || os.dataAgendada === data) return;
+  const o = comHistorico({ ...os, dataOriginal: os.dataOriginal || os.dataAgendada, dataAgendada: data, prazo: os.prazo && os.prazo < data ? data : os.prazo }, `Reprogramada de ${fmtDate(os.dataAgendada)} para ${fmtDate(data)}${motivo ? ' — ' + motivo : ''}`, usuario);
+  await db.os.put({ ...o, updatedAt: nowIso() });
 }
 
 export async function excluirOS(id: string): Promise<void> {

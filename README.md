@@ -2,7 +2,7 @@
 
 Plataforma web para gestão de **PMOC** e manutenção de **climatização e refrigeração (HVAC-R)**:
 ordens de serviço, cronograma anual, equipamentos com QR Code, estoque de peças, catálogo de serviços,
-equipe técnica, qualidade do ar, fluidos refrigerantes e o documento PMOC pronto para impressão.
+equipe técnica, qualidade do ar, fluidos refrigerantes, contratos e o documento PMOC pronto para impressão.
 
 Atende à **Lei Federal nº 13.589/2018**, à **Portaria GM/MS nº 3.523/1998 (Anexo I)**, à **Resolução ANVISA RE nº 09/2003**
 e à **ABNT NBR 13971**. Funciona 100% no navegador (inclusive offline, no celular do técnico) e é publicada
@@ -14,15 +14,17 @@ gratuitamente pelo **GitHub Pages**, sem servidor nem banco de dados para contra
 
 | Módulo | Recursos |
 |---|---|
+| **Preventivas (central)** | O processo da preventiva em 5 etapas visíveis: **A programar** (equipamentos com rotinas vencidas ou a vencer, sem OS) → **Programadas** → **Em execução** → **Aguardando liberação** → **Liberadas**. Botões **Programar** (escolhe as rotinas, data e técnico), **Executar agora** (cria a OS e abre o lançamento no celular), programação em lote, reprogramação de data, atribuição de técnico e liberação em um clique |
 | **Painel** | OS em aberto/atrasadas, cumprimento do PMOC, MTTR, SLA, disponibilidade, capacidade instalada (TR), gráficos mensais e central de alertas |
 | **Periodicidade por equipamento** | Cada equipamento tem suas **rotinas** (atividade × periodicidade em dias) com **última execução** e **próxima execução**: a próxima é recalculada a partir da última execução lançada pela equipe técnica. Ajuste fino por equipamento (intervalo, tempo, setor, responsável, reprogramação de data), histórico de execuções e status (em dia / a vencer / vencida) |
 | **Área do técnico** | Tela para celular: OS do técnico (em execução, atrasadas, hoje, próximos dias), check-in, lançamento de cada tarefa como **E** (executado), **P** (pendente) ou **N** (não executado, com motivo), tempo real, material, medições, fotos, materiais do estoque e assinaturas. Cada lançamento fica registrado com o executante e a data/hora |
 | **Perfis de acesso** | Técnico (lança execuções), Supervisor (libera as OS) e Gestor (acesso total), com PIN opcional e troca rápida de usuário |
 | **Ordens de serviço** | Formulário completo (informações gerais, padrões de execução, identificação do ambiente, proprietário e responsável técnico, tarefas E/P/N com tempo previsto × real e material, executantes, parada e interferência, alteração de localização, assinaturas do executante, responsável e supervisor, data/hora de liberação). Impressão preenchida ou **formulário em branco** para campo. Lista e quadro Kanban (arrastar e soltar), filtros, tipos (preventiva, corretiva, emergencial, higienização, instalação…), prioridade com **SLA do contrato**, equipe, checklist por equipamento (OK / Corrigido / NOK / N/A), **medições de campo com diagnóstico automático** (ΔT, superaquecimento e sub-resfriamento por tabela P×T de 10 fluidos), peças com **baixa automática no estoque**, serviços, apontamento de horas, laudo, fotos (câmera do celular), **assinatura digital** do técnico e do cliente, avaliação, histórico, salvamento automático e impressão/PDF com QR Code |
-| **Ocorrências / chamados** | Quebra, processo, anomalia simples/crítica, chamado, vazamento — conversão em OS com um clique |
+| **Ocorrências / chamados** | Quebra, processo, anomalia simples/crítica, chamado, vazamento — conversão em OS com um clique. **Impressão** do registro (identificação, local e equipamento, descrição, análise, atendimento com tempos e SLA, assinaturas) e **formulário em branco** para abertura em campo |
 | **Orçamentos** | Itens de serviços e peças, desconto, deslocamento, validade, impressão e conversão em OS |
 | **Documento PMOC** | Capa, identificação da edificação, proprietário e responsável técnico (ART/TRT/RRT), relação de ambientes com renovação de ar mínima, relação de equipamentos, **plano de manutenção por equipamento** (periodicidade, última e próxima execução e meses previstos/executados), registro de execução por equipamento, qualidade do ar, recomendações de emergência, normas e termo de responsabilidade |
-| **Cronograma por equipamento** | **Previsão diária** (dias 1–31, como o cronograma de manutenção periódica) e **visão anual**, rotina a rotina, com previsto, programado (OS gerada), reprogramado, executado, não executado e vencido; clique em um dia para reprogramar. **Geração automática das OS preventivas** (uma por equipamento, por ambiente ou por unidade), sem duplicar rotinas já programadas |
+| **Cronograma por equipamento** | **Previsão diária** (dias 1–31, como o cronograma de manutenção periódica) e **visão anual**, rotina a rotina, na legenda de cores do PMOC; clique em um dia para reprogramar (a rotina ou a OS já gerada). **Geração automática das OS preventivas** (uma por equipamento, por ambiente ou por unidade), sem duplicar rotinas já programadas |
+| **Contratos** | **Contrato padrão de prestação de serviços** de manutenção de climatização (PMOC), montado com os dados do cadastro: quadro-resumo, objeto, execução, PMOC e responsabilidade técnica, obrigações das partes, peças e fluido, preço com **valor por extenso**, reajuste, vigência, garantia, penalidades por SLA, rescisão, LGPD, foro e assinaturas com testemunhas, além dos **Anexos I** (locais e equipamentos), **II** (plano de manutenção) e **III** (níveis de serviço). Dois modelos: **particular** (Código Civil) e **Administração Pública** (Lei 14.133/2021: dotação, gestor e fiscal, garantia contratual, sanções, apostilamento do reajuste, PNCP). Impressão/PDF e download em **Word (.doc)** para ajustes de redação |
 | **Planos de manutenção** | 8 planos prontos e editáveis: Portaria 3.523 (Anexo I completo), Split/Janela, VRF/VRV, Chiller, Fan Coil/Self/AHU, Torre de resfriamento, Câmara fria/refrigeração comercial, Exaustão. Periodicidades diária a anual, tempo padrão e faixas de medição |
 | **Qualidade do ar** | Laudos da RE 09/2003 (fungos, relação I/E, CO₂, aerodispersóides, temperatura, umidade, velocidade, renovação) com avaliação automática e alerta de vencimento semestral |
 | **Fluidos refrigerantes** | Cargas, recolhimentos, vazamentos e testes de estanqueidade por equipamento, com **tCO₂e** (GWP) |
@@ -62,12 +64,30 @@ npm run build      # gera a pasta dist/ para publicação
 
 ---
 
-## Fluxo de trabalho recomendado
+## Como lançar as preventivas (passo a passo)
 
-1. **Gestor** cadastra unidades, ambientes e equipamentos (ou importa a planilha) e escolhe o plano modelo de cada equipamento — as rotinas são criadas automaticamente e podem ser ajustadas na ficha do equipamento.
-2. No **Cronograma por equipamento**, o gestor gera as OS preventivas do período (uma por equipamento).
-3. O **técnico** entra com seu usuário, abre a **Área do técnico** no celular, faz o check-in e lança cada tarefa (E/P/N), medições, fotos e materiais; colhe a assinatura do cliente e finaliza.
-4. O **supervisor** confere e **libera** a OS. A última execução de cada rotina é atualizada e a próxima data é recalculada pela periodicidade daquele equipamento.
+A preventiva é sempre registrada em uma OS, mas o processo fica todo na tela **Preventivas** (menu Operação):
+
+1. **Rotinas automáticas** — ao cadastrar o equipamento e escolher o plano (ex.: Split/Janela), o sistema cria as rotinas dele (ex.: limpar filtros a cada mês, higienizar a cada trimestre) e calcula a próxima data de cada uma. Ajustes finos ficam na ficha do equipamento.
+2. **Programar** — a etapa *A programar* lista os equipamentos com rotinas vencidas ou que vencem no período escolhido (7, 15, 30… dias) e que ainda não estão em OS.
+   - **Programar**: abre a lista de rotinas do equipamento (as vencidas e a vencer já vêm marcadas), escolha data e técnico → a OS é gerada.
+   - **Programar selecionados**: marca vários equipamentos e gera uma OS para cada um, de uma vez.
+   - **Executar agora**: cria a OS para hoje e abre direto a tela de lançamento — ideal para o técnico que já está no local (também disponível no botão **Preventiva** da ficha do equipamento, acessada pelo QR Code).
+3. **Executar** — o técnico abre a OS na **Área do técnico**, faz o check-in e marca cada rotina como **E** (executada), **P** (pendente) ou **N** (não executada, com motivo); registra medições, fotos e materiais, colhe a assinatura e finaliza.
+4. **Liberar** — o supervisor confere em *Aguardando liberação* e libera (individualmente ou todas). A última execução de cada rotina é atualizada e a próxima data é recalculada pela periodicidade daquele equipamento; rotinas lançadas como N continuam vencidas e voltam para *A programar*.
+
+Para mudar a data de uma OS programada, altere a data na etapa *Programadas* (ou clique no dia desejado no cronograma): ela passa a contar como **reprogramada**.
+
+### Legenda do cronograma e do documento PMOC
+
+| Cor | Situação |
+|---|---|
+| 🟦 **Azul — Programado** | Data prevista pela periodicidade do equipamento ou OS gerada |
+| 🟨 **Amarelo — Reprogramado** | Data alterada em relação à programação original |
+| 🟩 **Verde — Executado** | Rotina lançada como E pela equipe técnica |
+| 🟥 **Vermelho — Não executado** | Rotina lançada como N/pendente, ou data vencida sem execução |
+
+Periodicidades em meses (mensal, bimestral, trimestral, quadrimestral, semestral e anual) avançam por mês de calendário, de modo que uma rotina mensal aparece em todos os meses do plano.
 
 > Perfis e PIN são um controle de acesso local do navegador (cada aparelho), adequado para organizar quem lança o quê; não substituem autenticação em servidor.
 

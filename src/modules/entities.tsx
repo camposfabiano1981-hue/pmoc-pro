@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
-  Building2, Boxes, Factory, FileSignature, HardHat, MapPin, Package, QrCode, Snowflake, Truck, Users, Wind, Wrench,
+  Building2, Boxes, Factory, FileSignature, HardHat, MapPin, Package, Printer, QrCode, Snowflake, Truck, Users, Wind, Wrench,
 } from 'lucide-react';
 import type { EntityConfig, FieldDef } from '../components/crud';
 import { Badge, Button, IconButton, Input } from '../components/ui';
@@ -12,7 +12,8 @@ import {
   CATEGORIAS_PECA, CATEGORIAS_SERVICO, CERTIFICACOES, CRITICIDADES, FLUIDOS, FUNCOES, MARCAS, PERFIS, RE09, SETORES, STATUS_EQUIPAMENTO, TIPOS_ATIVIDADE_AMBIENTE,
   TIPOS_EDIFICACAO, TIPOS_EQUIPAMENTO, UFS, UNIDADES_MEDIDA, gwpDe,
 } from '../lib/catalogs';
-import { diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
+import { dateStr, diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
+import { CONTRATO_PADRAO, TIPOS_SERVICO_CONTRATO } from '../lib/contrato';
 import { equipLabel, type Lookups } from '../lib/lookups';
 
 const endereco = (section = 'Endereço'): FieldDef[] => [
@@ -454,37 +455,115 @@ export const fornecedoresCfg: EntityConfig = {
 };
 
 /* ---------------- Contratos ---------------- */
+const umAnoDepois = () => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  d.setDate(d.getDate() - 1);
+  return dateStr(d);
+};
+
 export const contratosCfg: EntityConfig = {
   table: 'contratos',
   title: 'Contratos',
   singular: 'Contrato',
   icon: <FileSignature size={20} />,
+  subtitle: 'Contrato padrão de prestação de serviços de manutenção (PMOC) — modelo particular ou Lei 14.133/2021, com impressão e Word',
   numbering: { field: 'numero', kind: 'ct' },
+  formSize: 'xl',
   fields: [
-    { name: 'numero', label: 'Número', type: 'text', span: 1, placeholder: 'Automático' },
-    { name: 'clienteId', label: 'Cliente', type: 'ref', required: true, span: 2, ref: { list: (l) => l.clientes } },
-    { name: 'status', label: 'Situação', type: 'select', options: [{ value: 'ativo', label: 'Ativo' }, { value: 'suspenso', label: 'Suspenso' }, { value: 'encerrado', label: 'Encerrado' }], span: 1 },
-    { name: 'objeto', label: 'Objeto', type: 'textarea', required: true, span: 4 },
-    { name: 'inicio', label: 'Início', type: 'date', required: true, span: 1 },
-    { name: 'fim', label: 'Término', type: 'date', required: true, span: 1 },
-    { name: 'valorMensal', label: 'Valor mensal (R$)', type: 'money', span: 1 },
-    { name: 'diaVencimento', label: 'Dia de vencimento', type: 'number', span: 1 },
-    { name: 'slaUrgenteH', label: 'SLA urgente (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento' },
-    { name: 'slaAltaH', label: 'SLA alta (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento' },
-    { name: 'slaMediaH', label: 'SLA média (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento' },
-    { name: 'slaBaixaH', label: 'SLA baixa (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento' },
-    { name: 'observacoes', label: 'Observações / cláusulas', type: 'textarea', span: 4, section: 'Outros' },
+    { name: 'numero', label: 'Número', type: 'text', span: 1, placeholder: 'Automático', section: 'Identificação' },
+    { name: 'modelo', label: 'Modelo do contrato', type: 'select', span: 1, section: 'Identificação', options: [{ value: 'privado', label: 'Particular (Código Civil)' }, { value: 'publico', label: 'Administração Pública (Lei 14.133/2021)' }] },
+    { name: 'status', label: 'Situação', type: 'select', options: [{ value: 'ativo', label: 'Ativo' }, { value: 'suspenso', label: 'Suspenso' }, { value: 'encerrado', label: 'Encerrado' }], span: 1, section: 'Identificação' },
+    { name: 'tipoServico', label: 'Tipo de serviço', type: 'select', span: 1, section: 'Identificação', options: TIPOS_SERVICO_CONTRATO },
+    { name: 'clienteId', label: 'Contratante (cliente)', type: 'ref', required: true, span: 2, section: 'Identificação', ref: { list: (l) => l.clientes }, onChangeEffect: () => ({ unidadesIds: [] }) },
+    { name: 'rtId', label: 'Responsável técnico', type: 'ref', span: 2, section: 'Identificação', ref: { list: (l) => l.profissionais, label: (r) => `${r.nome}${r.registro ? ' — ' + (r.conselho || '') + ' ' + r.registro : ''}` } },
+    {
+      name: 'unidadesIds', label: 'Locais atendidos', type: 'custom', span: 4, section: 'Identificação', help: 'Nenhum marcado = todas as unidades do cliente',
+      render: ({ value, onChange, form, lookups }) => {
+        const sel: string[] = value || [];
+        const us = lookups.unidades.filter((u) => u.clienteId === form.clienteId);
+        if (!us.length) return <p className="text-xs text-slate-500">Cadastre as unidades do cliente.</p>;
+        return (
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {us.map((u) => (
+              <label key={u.id} className="inline-flex items-center gap-1.5 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={sel.includes(u.id)} onChange={(e) => onChange(e.target.checked ? [...sel, u.id] : sel.filter((x) => x !== u.id))} />
+                {u.nome}
+              </label>
+            ))}
+          </div>
+        );
+      },
+    },
+    { name: 'objeto', label: 'Escopo específico / objeto', type: 'textarea', required: true, span: 4, section: 'Identificação', help: 'Entra na Cláusula Primeira (ex.: manutenção de 40 splits e 2 chiller do edifício sede)' },
+    { name: 'inicio', label: 'Início da vigência', type: 'date', required: true, span: 1, section: 'Vigência e valores' },
+    { name: 'fim', label: 'Término', type: 'date', required: true, span: 1, section: 'Vigência e valores' },
+    { name: 'valorMensal', label: 'Valor mensal (R$)', type: 'money', span: 1, section: 'Vigência e valores' },
+    { name: 'diaVencimento', label: 'Dia de vencimento', type: 'number', span: 1, section: 'Vigência e valores' },
+    { name: 'formaPagamento', label: 'Forma de pagamento', type: 'text', span: 2, section: 'Vigência e valores', suggestions: ['boleto bancário ou PIX', 'depósito/transferência bancária', 'ordem bancária (OB)'] },
+    { name: 'reajusteIndice', label: 'Índice de reajuste anual', type: 'text', span: 1, section: 'Vigência e valores', suggestions: ['IPCA/IBGE', 'IGP-M/FGV', 'INPC/IBGE', 'IST'] },
+    { name: 'renovacaoAutomatica', label: 'Renovação automática', type: 'checkbox', span: 1, section: 'Vigência e valores', placeholder: 'Renova por iguais períodos', hidden: (f) => f.modelo === 'publico' },
+    { name: 'periodicidadeVisitas', label: 'Visitas preventivas', type: 'text', span: 1, section: 'Escopo e atendimento', suggestions: ['mensais', 'bimestrais', 'trimestrais', 'semanais'] },
+    { name: 'horarioAtendimento', label: 'Horário de atendimento', type: 'text', span: 2, section: 'Escopo e atendimento' },
+    { name: 'atendimento24h', label: 'Emergência 24h inclusa', type: 'checkbox', span: 1, section: 'Escopo e atendimento', placeholder: 'Sim, no preço mensal' },
+    { name: 'pecasInclusas', label: 'Peças de reposição', type: 'select', span: 2, section: 'Escopo e atendimento', options: [{ value: 'nao', label: 'Não inclusas (orçamento prévio)' }, { value: 'sim', label: 'Inclusas (exceto compressor, placas, serpentinas)' }, { value: 'limite', label: 'Inclusas até um limite mensal' }] },
+    { name: 'limitePecasMensal', label: 'Limite mensal de peças (R$)', type: 'money', span: 1, section: 'Escopo e atendimento', hidden: (f) => f.pecasInclusas !== 'limite' },
+    { name: 'fluidoIncluso', label: 'Fluido refrigerante', type: 'checkbox', span: 1, section: 'Escopo e atendimento', placeholder: 'Complementação inclusa' },
+    { name: 'analiseArInclusa', label: 'Análise do ar (RE 09)', type: 'checkbox', span: 1, section: 'Escopo e atendimento', placeholder: 'Semestral inclusa' },
+    { name: 'garantiaDias', label: 'Garantia dos serviços (dias)', type: 'number', span: 1, section: 'Escopo e atendimento' },
+    { name: 'slaUrgenteH', label: 'SLA urgente (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento (Anexo III)' },
+    { name: 'slaAltaH', label: 'SLA alta (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento (Anexo III)' },
+    { name: 'slaMediaH', label: 'SLA média (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento (Anexo III)' },
+    { name: 'slaBaixaH', label: 'SLA baixa (h)', type: 'number', span: 1, section: 'SLA — prazo de atendimento (Anexo III)' },
+    { name: 'descontoSlaPct', label: 'Desconto por SLA descumprido (%)', type: 'number', step: '0.1', span: 1, section: 'Penalidades e rescisão' },
+    { name: 'multaAtrasoPct', label: 'Multa por atraso de pagamento (%)', type: 'number', step: '0.1', span: 1, section: 'Penalidades e rescisão', hidden: (f) => f.modelo === 'publico' },
+    { name: 'jurosMesPct', label: 'Juros de mora (% a.m.)', type: 'number', step: '0.1', span: 1, section: 'Penalidades e rescisão', hidden: (f) => f.modelo === 'publico' },
+    { name: 'multaRescisaoPct', label: 'Multa rescisória / compensatória (%)', type: 'number', step: '0.1', span: 1, section: 'Penalidades e rescisão' },
+    { name: 'avisoPrevioDias', label: 'Aviso prévio (dias)', type: 'number', span: 1, section: 'Penalidades e rescisão', hidden: (f) => f.modelo === 'publico' },
+    { name: 'foro', label: 'Foro (comarca)', type: 'text', span: 2, section: 'Penalidades e rescisão' },
+    { name: 'processo', label: 'Processo administrativo nº', type: 'text', span: 1, section: 'Administração pública', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'licitacao', label: 'Licitação / contratação direta', type: 'text', span: 2, section: 'Administração pública', placeholder: 'Pregão Eletrônico nº 09/2025', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'garantiaContratualPct', label: 'Garantia contratual (%)', type: 'number', step: '0.1', span: 1, section: 'Administração pública', help: 'Art. 96–98 (até 5%)', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'dotacao', label: 'Dotação orçamentária', type: 'text', span: 2, section: 'Administração pública', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'gestorContrato', label: 'Gestor do contrato', type: 'text', span: 1, section: 'Administração pública', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'fiscalContrato', label: 'Fiscal do contrato', type: 'text', span: 1, section: 'Administração pública', hidden: (f) => f.modelo !== 'publico' },
+    { name: 'representanteContratante', label: 'Representante do contratante', type: 'text', span: 2, section: 'Assinaturas', placeholder: 'Nome, cargo e CPF' },
+    { name: 'representanteContratada', label: 'Representante da contratada', type: 'text', span: 2, section: 'Assinaturas', placeholder: 'Nome, cargo e CPF' },
+    { name: 'localAssinatura', label: 'Local da assinatura', type: 'text', span: 1, section: 'Assinaturas' },
+    { name: 'dataAssinatura', label: 'Data da assinatura', type: 'date', span: 1, section: 'Assinaturas' },
+    { name: 'testemunha1', label: 'Testemunha 1', type: 'text', span: 1, section: 'Assinaturas', placeholder: 'Nome / CPF', hidden: (f) => f.modelo === 'publico' },
+    { name: 'testemunha2', label: 'Testemunha 2', type: 'text', span: 1, section: 'Assinaturas', placeholder: 'Nome / CPF', hidden: (f) => f.modelo === 'publico' },
+    { name: 'clausulasAdicionais', label: 'Condições específicas (uma por linha)', type: 'textarea', span: 4, section: 'Cláusulas adicionais', help: 'Cada linha vira um item da cláusula "Das condições específicas", antes do foro' },
+    { name: 'observacoes', label: 'Observações internas', type: 'textarea', span: 4, section: 'Cláusulas adicionais', help: 'Não saem no contrato impresso' },
   ],
   columns: [
     { key: 'numero', label: 'Nº', render: (r) => <span className="font-mono text-xs">{r.numero}</span> },
     { key: 'clienteId', label: 'Cliente', value: (r, l) => l.clienteMap.get(r.clienteId)?.nome },
+    { key: 'modelo', label: 'Modelo', value: (r) => (r.modelo === 'publico' ? 'Lei 14.133' : 'Particular') },
     { key: 'inicio', label: 'Início', value: (r) => r.inicio, render: (r) => fmtDate(r.inicio) },
     { key: 'fim', label: 'Término', value: (r) => r.fim, render: (r) => vencBadge(r.fim) },
     { key: 'valorMensal', label: 'Mensal', value: (r) => r.valorMensal || 0, render: (r) => money(r.valorMensal) },
     { key: 'status', label: 'Situação', render: (r) => <Badge className={r.status === 'ativo' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200' : undefined}>{r.status}</Badge> },
   ],
-  searchText: (r, l) => [r.numero, r.objeto, l.clienteMap.get(r.clienteId)?.nome].join(' '),
-  defaults: (l) => ({ status: 'ativo', clienteId: l.clientes[0]?.id, slaUrgenteH: 4, slaAltaH: 24, slaMediaH: 48, slaBaixaH: 120 }),
+  searchText: (r, l) => [r.numero, r.objeto, r.processo, l.clienteMap.get(r.clienteId)?.nome].join(' '),
+  defaults: (l) => ({
+    ...CONTRATO_PADRAO,
+    status: 'ativo',
+    clienteId: l.clientes[0]?.id,
+    inicio: todayStr(),
+    fim: umAnoDepois(),
+    slaUrgenteH: 4,
+    slaAltaH: 24,
+    slaMediaH: 48,
+    slaBaixaH: 120,
+    localAssinatura: l.empresa.cidade,
+    foro: l.empresa.cidade,
+    rtId: l.profissionais.find((p) => p.ativo && p.conselho && p.conselho !== 'Nenhum' && p.registro)?.id,
+    objeto: 'Manutenção preventiva e corretiva dos sistemas de ar-condicionado, com execução do PMOC, atendimento a chamados e emissão de relatórios mensais.',
+  }),
+  rowActions: (r) => (
+    <Link to={`/contratos/${r.id}/imprimir`}><IconButton title="Contrato para impressão / Word"><Printer size={15} /></IconButton></Link>
+  ),
 };
 
 /* ---------------- Qualidade do ar ---------------- */

@@ -8,6 +8,7 @@ import { addDays, dateStr, localDateTimeStr, todayStr } from '../lib/format';
 import { gerarPreventivas } from '../lib/preventivas';
 import { aplicarPlano, migrarRotinas, registrarExecucoesDaOS } from '../lib/rotinas';
 import { RECOMENDACOES_PADRAO } from '../lib/catalogs';
+import { CONTRATO_PADRAO } from '../lib/contrato';
 
 const stamp = () => {
   const ts = nowIso();
@@ -261,6 +262,8 @@ async function seedDados(): Promise<void> {
     id: uid(), ...stamp(), numero: await nextNumber('ct'), clienteId: cliente.id,
     objeto: 'Prestação de serviços de manutenção preventiva e corretiva em sistemas de climatização com elaboração e execução do PMOC.',
     inicio: inicioVig, fim: fimVig, valorMensal: 6800, diaVencimento: 10, slaUrgenteH: 4, slaAltaH: 24, slaMediaH: 48, slaBaixaH: 120, status: 'ativo',
+    ...CONTRATO_PADRAO, rtId: rt.id, atendimento24h: true, pecasInclusas: 'limite', limitePecasMensal: 800, foro: 'Corumbá/MS', localAssinatura: 'Corumbá/MS', dataAssinatura: inicioVig,
+    representanteContratante: 'Mariana Souza, gerente administrativa', representanteContratada: 'Ricardo Lima, sócio-administrador',
   };
   await db.contratos.add(contrato);
 

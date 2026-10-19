@@ -31,6 +31,9 @@ export function CampoHome() {
     { titulo: 'Aguardando liberação', lista: minhas.filter((o) => o.status === 'concluida'), vazio: 'Nenhuma OS aguardando liberação.' },
   ];
   const nome = l.profissionalMap.get(tecnico)?.nome;
+  const programadas = new Set(osList.filter((o) => !OS_FINALIZADAS.includes(o.status)).flatMap((o) => o.equipamentos.flatMap((e) => e.checklist.map((c) => c.rotinaId))));
+  const semOS = useLiveQuery(() => db.rotinas.filter((r) => r.ativa && r.proximaExecucao <= todayStr()).toArray(), []) || [];
+  const eqsVencidos = new Set(semOS.filter((r) => !programadas.has(r.id)).map((r) => r.equipamentoId)).size;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -49,6 +52,12 @@ export function CampoHome() {
           </Field>
           <p className="mt-2 text-xs text-slate-500">Para lançar como técnico, troque o usuário no menu superior (ícone do usuário).</p>
         </Card>
+      )}
+      {eqsVencidos > 0 && (
+        <Link to="/preventivas" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <span><b>{eqsVencidos} equipamento(s)</b> com preventiva vencida e sem OS. Toque para programar ou executar agora.</span>
+          <ChevronRight size={18} />
+        </Link>
       )}
       <div className="space-y-5">
         {grupos.map((g) => (

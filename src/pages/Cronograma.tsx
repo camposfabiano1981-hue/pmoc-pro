@@ -1,28 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CalendarRange, ChevronDown, ChevronRight, Printer, Wand2 } from 'lucide-react';
+import { CalendarCheck2, CalendarRange, ChevronDown, ChevronRight, Printer, Wand2 } from 'lucide-react';
 import { db } from '../db/db';
 import type { Rotina } from '../db/types';
 import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select, Stat, Toggle, cx, useConfirm, useToast } from '../components/ui';
 import { useLookups } from '../lib/lookups';
-import { useSessao } from '../lib/sessao';
+import { assinaturaUsuario, useSessao } from '../lib/sessao';
+import { reprogramarOS } from '../lib/osHelpers';
 import { OS_FINALIZADAS, SETORES } from '../lib/catalogs';
 import { MESES, MESES_CURTOS, addDays, dateStr, fmtDate, fmtHoras, todayStr } from '../lib/format';
 import { gerarPreventivas, type Agrupamento } from '../lib/preventivas';
-import { projetar } from '../lib/rotinas';
+import { MARCAS, ORDEM_MARCAS, marcarRotina, programacoesAbertas, type CelulaMarca } from '../lib/marcas';
 import { imprimir } from '../lib/env';
-
-type Marca = 'E' | 'N' | 'P' | '!' | 'R' | 'X' | '';
-
-const MARCAS: Record<Exclude<Marca, ''>, { cls: string; label: string }> = {
-  X: { cls: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200', label: 'Previsto (pela periodicidade)' },
-  P: { cls: 'bg-indigo-600 text-white', label: 'Programado (OS gerada)' },
-  R: { cls: 'bg-amber-400 text-amber-950', label: 'Reprogramado' },
-  E: { cls: 'bg-emerald-600 text-white', label: 'Executado' },
-  N: { cls: 'bg-rose-100 text-rose-800 ring-1 ring-rose-400 dark:bg-rose-950 dark:text-rose-200', label: 'Não executado' },
-  '!': { cls: 'bg-rose-600 text-white', label: 'Vencido' },
-};
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const POR_PAGINA = 25;
@@ -31,7 +21,7 @@ export default function Cronograma() {
   const l = useLookups();
   const toast = useToast();
   const confirm = useConfirm();
-  const { pode } = useSessao();
+  const { pode, usuario } = useSessao();
   const [params] = useSearchParams();
   const pmocParam = l.pmocMap.get(params.get('pmoc') || '');
   const hoje = new Date();
@@ -63,13 +53,7 @@ export default function Cronograma() {
   const execs = useLiveQuery(() => db.execucoes.where('data').between(de, ate, true, true).toArray(), [de, ate]) || [];
   const abertas = useLiveQuery(() => db.os.filter((o) => !OS_FINALIZADAS.includes(o.status)).toArray(), []) || [];
 
-  const programadas = useMemo(() => {
-    const m = new Map<string, { data: string; numero: string }[]>();
-    for (const o of abertas)
-      for (const it of o.equipamentos)
-        for (const c of it.checklist) if (c.rotinaId) (m.get(c.rotinaId) || m.set(c.rotinaId, []).get(c.rotinaId)!).push({ data: o.dataAgendada || o.dataAbertura.slice(0, 10), numero: o.numero });
-    return m;
-  }, [abertas]);
+  const programadas = useMemo(() => programacoesAbertas(abertas), [abertas]);
   const execPorRotina = useMemo(() => {
     const m = new Map<string, typeof execs>();
     for (const e of execs) (m.get(e.rotinaId) || m.set(e.rotinaId, []).get(e.rotinaId)!).push(e);
@@ -78,23 +62,7 @@ export default function Cronograma() {
 
   const chave = (d: string) => (visao === 'diaria' ? d : d.slice(0, 7));
 
-  const marcar = (r: Rotina): Record<string, { m: Marca; n: number }> => {
-    const out: Record<string, { m: Marca; n: number }> = {};
-    const prio: Marca[] = ['E', 'N', 'P', '!', 'R', 'X', ''];
-    const put = (d: string, m: Marca) => {
-      const k = chave(d);
-      const atual = out[k];
-      if (!atual) out[k] = { m, n: 1 };
-      else {
-        atual.n++;
-        if (prio.indexOf(m) < prio.indexOf(atual.m)) atual.m = m;
-      }
-    };
-    for (const d of projetar(r, de, ate)) put(d, d === r.proximaExecucao && d < hojeStr ? '!' : d === r.proximaExecucao && r.reprogramada ? 'R' : 'X');
-    for (const p of programadas.get(r.id) || []) if (p.data >= de && p.data <= ate) put(p.data, 'P');
-    for (const e of execPorRotina.get(r.id) || []) put(e.data, e.status === 'E' ? 'E' : e.status === 'N' ? 'N' : 'P');
-    return out;
-  };
+  const marcar = (r: Rotina): Record<string, CelulaMarca> => marcarRotina(r, { de, ate, hoje: hojeStr, execs: execPorRotina.get(r.id), programadas: programadas.get(r.id), chave });
 
   const equips = l.equipamentos.filter((e) => e.unidadeId === unidade?.id && e.status !== 'desativado' && (!equipId || e.id === equipId));
   const porEquip = useMemo(() => {
@@ -121,13 +89,20 @@ export default function Cronograma() {
   const aVencer = daUnidade.filter((r) => r.proximaExecucao >= hojeStr && r.proximaExecucao <= addDays(hojeStr, 7)).length;
   const execE = execs.filter((x) => x.status === 'E' && equips.some((e) => e.id === x.equipamentoId)).length;
   const execN = execs.filter((x) => x.status === 'N' && equips.some((e) => e.id === x.equipamentoId)).length;
-  const totPorCol = cols.map((c) => linhas.reduce((a, g) => a + g.rows.reduce((s, x) => s + (x.marcas[c.key] && ['X', 'R', '!', 'P'].includes(x.marcas[c.key].m) ? (x.r.tempoMin || 0) * x.marcas[c.key].n : 0), 0), 0));
+  const totPorCol = cols.map((c) => linhas.reduce((a, g) => a + g.rows.reduce((s, x) => s + (x.marcas[c.key] && x.marcas[c.key].m !== 'E' ? (x.r.tempoMin || 0) * x.marcas[c.key].n : 0), 0), 0));
   const pageLinhas = linhas.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA);
   const paginas = Math.max(1, Math.ceil(linhas.length / POR_PAGINA));
 
   const reprogramar = async (r: Rotina, dia: string) => {
     if (visao !== 'diaria' || !pode('gerir_os')) return;
     const eq = l.equipamentoMap.get(r.equipamentoId);
+    const prog = programadas.get(r.id)?.[0];
+    if (prog) {
+      if (!(await confirm({ title: 'Reprogramar OS', message: `"${r.descricao}" (${eq?.tag}) já está na OS ${prog.numero}, agendada para ${fmtDate(prog.data)}. Reprogramar a OS inteira para ${fmtDate(dia)}?`, confirmText: 'Reprogramar OS' }))) return;
+      await reprogramarOS(prog.osId, dia, assinaturaUsuario(usuario));
+      toast(`OS ${prog.numero} reprogramada.`);
+      return;
+    }
     if (!(await confirm({ title: 'Reprogramar rotina', message: `Reprogramar a próxima execução de "${r.descricao}" (${eq?.tag}) de ${fmtDate(r.proximaExecucao)} para ${fmtDate(dia)}?`, confirmText: 'Reprogramar' }))) return;
     await db.rotinas.update(r.id, { proximaExecucao: dia, reprogramada: true, updatedAt: new Date().toISOString() });
     toast('Rotina reprogramada.');
@@ -137,11 +112,12 @@ export default function Cronograma() {
     <div>
       <PageHeader
         title="Cronograma de manutenção por equipamento"
-        subtitle="Previsão pela periodicidade de cada rotina, programado (OS gerada), executado e vencido"
+        subtitle="Programado (azul), reprogramado (amarelo), executado (verde) e não executado (vermelho), rotina a rotina"
         icon={<CalendarRange size={20} />}
         actions={
           <>
             <Button variant="outline" icon={<Printer size={16} />} onClick={imprimir}>Imprimir</Button>
+            <Link to="/preventivas"><Button variant="outline" icon={<CalendarCheck2 size={16} />}>Central de preventivas</Button></Link>
             {pode('gerir_os') && <Button icon={<Wand2 size={16} />} onClick={() => setGen(true)}>Gerar OS preventivas</Button>}
           </>
         }
@@ -194,10 +170,11 @@ export default function Cronograma() {
       </div>
 
       <div className="mb-3 flex flex-wrap gap-3 text-xs">
-        {Object.entries(MARCAS).map(([k, v]) => (
-          <span key={k} className="inline-flex items-center gap-1">
-            <span className={cx('inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold', v.cls)}>{k}</span>
-            {v.label}
+        <b className="uppercase text-slate-500">Legenda:</b>
+        {ORDEM_MARCAS.map((k) => (
+          <span key={k} className="inline-flex items-center gap-1" title={MARCAS[k].desc}>
+            <span className={cx('inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold', MARCAS[k].cls)}>{k}</span>
+            {MARCAS[k].label}
           </span>
         ))}
         {visao === 'diaria' && pode('gerir_os') && <span className="text-slate-500">· Clique em um dia vazio para reprogramar a próxima execução da rotina.</span>}
@@ -255,8 +232,8 @@ export default function Cronograma() {
                             return (
                               <td key={c.key} className={cx('px-0 py-0.5 text-center', c.fds && 'bg-slate-50 dark:bg-slate-800/40')}>
                                 {mk ? (
-                                  <span title={`${MARCAS[mk.m as Exclude<Marca, ''>].label}${mk.n > 1 ? ` (${mk.n}×)` : ''}`} className={cx('inline-flex h-5 w-6 items-center justify-center rounded text-[10px] font-bold', MARCAS[mk.m as Exclude<Marca, ''>].cls)}>
-                                    {visao === 'anual' && mk.n > 1 && mk.m === 'X' ? mk.n : mk.m}
+                                  <span title={`${MARCAS[mk.m].label} — ${[...new Set(mk.info)].join(' · ')}`} className={cx('inline-flex h-5 w-6 items-center justify-center rounded text-[10px] font-bold', MARCAS[mk.m].cls)}>
+                                    {visao === 'anual' && mk.n > 1 && mk.m === 'P' ? mk.n : mk.m}
                                   </span>
                                 ) : visao === 'diaria' && pode('gerir_os') ? (
                                   <button type="button" aria-label={`Reprogramar para ${fmtDate(c.key)}`} className="h-5 w-6 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40" onClick={() => reprogramar(r, c.key)} />

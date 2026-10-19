@@ -17,10 +17,13 @@ import OsList from './pages/OsList';
 import OsEdit from './pages/OsEdit';
 import OsPrint from './pages/OsPrint';
 import OrcamentoPrint from './pages/OrcamentoPrint';
+import OcorrenciaPrint from './pages/OcorrenciaPrint';
+import ContratoPrint from './pages/ContratoPrint';
 import Estoque from './pages/Estoque';
 import { PlanoEdit, PlanosList } from './pages/Planos';
 import { PmocDocumento, pmocsCfg } from './pages/Pmoc';
 import Cronograma from './pages/Cronograma';
+import Preventivas from './pages/Preventivas';
 import { EquipamentoDetalhe, Etiquetas } from './pages/Equipamento';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
@@ -45,11 +48,13 @@ export default function App() {
                 <Route path="os/:id" element={<OsEdit key="edit" />} />
                 <Route path="os/:id/imprimir" element={<OsPrint />} />
                 <Route path="ocorrencias" element={<EntityPage key="oc" cfg={ocorrenciasCfg} />} />
+                <Route path="ocorrencias/:id/imprimir" element={<OcorrenciaPrint />} />
                 <Route path="orcamentos" element={<EntityPage key="orc" cfg={orcamentosCfg} />} />
                 <Route path="orcamentos/:id/imprimir" element={<OrcamentoPrint />} />
                 <Route path="pmoc" element={<EntityPage key="pmoc" cfg={pmocsCfg} />} />
                 <Route path="pmoc/:id/documento" element={<PmocDocumento />} />
                 <Route path="cronograma" element={<Cronograma />} />
+                <Route path="preventivas" element={<Preventivas />} />
                 <Route path="planos" element={<PlanosList />} />
                 <Route path="planos/:id" element={<PlanoEdit />} />
                 <Route path="qualidade-ar" element={<EntityPage key="ar" cfg={qualidadeArCfg} />} />
@@ -66,6 +71,7 @@ export default function App() {
                 <Route path="estoque" element={<Estoque />} />
                 <Route path="fornecedores" element={<EntityPage key="forn" cfg={fornecedoresCfg} />} />
                 <Route path="contratos" element={<EntityPage key="ct" cfg={contratosCfg} />} />
+                <Route path="contratos/:id/imprimir" element={<ContratoPrint />} />
                 <Route path="relatorios" element={<Relatorios />} />
                 <Route path="configuracoes" element={<Configuracoes />} />
                 <Route path="busca" element={<Busca />} />

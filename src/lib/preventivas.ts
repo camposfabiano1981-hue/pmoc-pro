@@ -16,6 +16,10 @@ export interface GerarParams {
   responsavelId?: ID;
   tecnicosIds?: ID[];
   setor?: string;
+  /** Restringe a estes equipamentos */
+  equipamentoIds?: ID[];
+  /** Rotinas escolhidas manualmente (entram mesmo se a próxima execução for depois da data final) */
+  rotinaIds?: ID[];
   dryRun?: boolean;
 }
 
@@ -51,11 +55,12 @@ export async function gerarPreventivas(p: GerarParams): Promise<GerarResultado> 
   for (const unidadeId of p.unidadeIds) {
     const unidade = uniMap.get(unidadeId);
     const pmoc = pmocs.find((x) => x.unidadeId === unidadeId && x.status === 'vigente');
-    const equips = equipamentos.filter((e) => e.unidadeId === unidadeId && e.status !== 'desativado');
+    const equips = equipamentos.filter((e) => e.unidadeId === unidadeId && e.status !== 'desativado' && (!p.equipamentoIds || p.equipamentoIds.includes(e.id)));
+    const escolhidas = p.rotinaIds ? new Set(p.rotinaIds) : null;
     const grupos = new Map<string, { label: string; equip?: Equipamento; ambienteId?: ID; itens: ItemOsEquip[]; datas: string[]; setores: string[]; tempo: number }>();
 
     for (const eq of equips) {
-      const devidas = (porEquip.get(eq.id) || []).filter((r) => r.proximaExecucao <= p.ate).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+      const devidas = (porEquip.get(eq.id) || []).filter((r) => (escolhidas ? escolhidas.has(r.id) : r.proximaExecucao <= p.ate)).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
       const livres = devidas.filter((r) => !programadas.has(r.id));
       out.jaProgramadas += devidas.length - livres.length;
       if (!livres.length) continue;
@@ -104,7 +109,8 @@ export async function gerarPreventivas(p: GerarParams): Promise<GerarResultado> 
         tempoPrevistoMin: g.tempo,
         dataAbertura: ts,
         dataAgendada,
-        prazo: p.ate,
+        dataOriginal: dataAgendada,
+        prazo: p.ate < dataAgendada ? dataAgendada : p.ate,
         equipamentos: g.itens,
         pecas: [],
         servicos: [],
@@ -123,4 +129,33 @@ function moda(arr: string[]): string | undefined {
   const c = new Map<string, number>();
   for (const x of arr) c.set(x, (c.get(x) || 0) + 1);
   return [...c.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+/**
+ * Programa (gera a OS de) rotinas escolhidas de um equipamento. Rotinas que já estão
+ * em OS aberta são ignoradas. Retorna a OS criada (ou nada, se não havia rotina livre).
+ */
+export async function programarRotinas(p: { equipamentoId: ID; rotinaIds: ID[]; data: string; responsavelId?: ID; usuario?: string }): Promise<OS | undefined> {
+  const eq = await db.equipamentos.get(p.equipamentoId);
+  if (!eq || !p.rotinaIds.length) return undefined;
+  const r = await gerarPreventivas({
+    unidadeIds: [eq.unidadeId],
+    equipamentoIds: [eq.id],
+    rotinaIds: p.rotinaIds,
+    de: p.data,
+    ate: p.data,
+    agrupamento: 'equipamento',
+    dataAgendada: p.data,
+    responsavelId: p.responsavelId,
+  });
+  const os = r.criadas[0];
+  if (os && p.usuario) await db.os.update(os.id, { criadoPor: p.usuario, historico: [...os.historico, { data: nowIso(), texto: 'Programada pela central de preventivas', usuario: p.usuario }] });
+  return os;
+}
+
+/** Reprograma a próxima execução das rotinas (sem OS) para uma nova data. */
+export async function reprogramarRotinas(ids: ID[], data: string): Promise<void> {
+  const rs = (await db.rotinas.bulkGet(ids)).filter((r): r is Rotina => !!r);
+  const ts = nowIso();
+  await db.rotinas.bulkPut(rs.map((r) => ({ ...r, proximaExecucao: data, reprogramada: true, updatedAt: ts })));
 }

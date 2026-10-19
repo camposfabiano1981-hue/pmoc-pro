@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertOctagon, BarChart3, Boxes, Building2, CalendarDays, ClipboardCheck, ClipboardList, Factory, FileSignature, FileText, HardHat, LayoutDashboard,
-  ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange, UserCircle2,
+  ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange, UserCircle2, CalendarCheck2,
 } from 'lucide-react';
 import { useSessao, type Perfil } from '../lib/sessao';
 import { Badge, Button, Input, Modal } from './ui';
@@ -27,6 +27,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Operação',
     items: [
       { to: '/', label: 'Painel', icon: <LayoutDashboard size={18} /> },
+      { to: '/preventivas', label: 'Preventivas', icon: <CalendarCheck2 size={18} />, perfis: TODOS },
       { to: '/campo', label: 'Área do técnico', icon: <HardHat size={18} />, perfis: TODOS },
       { to: '/agenda', label: 'Agenda', icon: <CalendarDays size={18} />, perfis: TODOS },
       { to: '/os', label: 'Ordens de serviço', icon: <ClipboardList size={18} /> },

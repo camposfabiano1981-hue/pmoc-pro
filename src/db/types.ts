@@ -270,6 +270,43 @@ export interface Contrato extends Base {
   slaBaixaH?: number;
   status: 'ativo' | 'suspenso' | 'encerrado';
   observacoes?: string;
+  /** Modelo do instrumento: particular (Código Civil) ou administrativo (Lei 14.133/2021) */
+  modelo?: 'privado' | 'publico';
+  tipoServico?: string;
+  /** Locais atendidos; vazio = todas as unidades do cliente */
+  unidadesIds?: ID[];
+  rtId?: ID;
+  periodicidadeVisitas?: string;
+  horarioAtendimento?: string;
+  atendimento24h?: boolean;
+  pecasInclusas?: 'nao' | 'sim' | 'limite';
+  limitePecasMensal?: number;
+  fluidoIncluso?: boolean;
+  analiseArInclusa?: boolean;
+  formaPagamento?: string;
+  reajusteIndice?: string;
+  renovacaoAutomatica?: boolean;
+  avisoPrevioDias?: number;
+  multaAtrasoPct?: number;
+  jurosMesPct?: number;
+  multaRescisaoPct?: number;
+  descontoSlaPct?: number;
+  garantiaDias?: number;
+  foro?: string;
+  localAssinatura?: string;
+  dataAssinatura?: string;
+  representanteContratante?: string;
+  representanteContratada?: string;
+  testemunha1?: string;
+  testemunha2?: string;
+  clausulasAdicionais?: string;
+  /* Administração pública (Lei 14.133/2021) */
+  processo?: string;
+  licitacao?: string;
+  dotacao?: string;
+  gestorContrato?: string;
+  fiscalContrato?: string;
+  garantiaContratualPct?: number;
 }
 
 export interface Pmoc extends Base {
@@ -440,6 +477,8 @@ export interface OS extends Base {
   docAssinante?: string;
   avaliacao?: number;
   preventivaRef?: string;
+  /** Data programada na geração da preventiva; se a data agendada mudar, a OS conta como reprogramada */
+  dataOriginal?: string;
   historico: { data: string; texto: string; usuario?: string }[];
 }
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { AlertOctagon, ClipboardPlus, Pencil, Printer, QrCode, Wind } from 'lucide-react';
+import { AlertOctagon, CalendarCheck2, ClipboardPlus, Pencil, Printer, QrCode, Wind } from 'lucide-react';
 import { db } from '../db/db';
 import { EntityFormModal } from '../components/crud';
 import { Badge, Button, Card, PageHeader, Select, Stat } from '../components/ui';
@@ -11,6 +11,7 @@ import { useLookups } from '../lib/lookups';
 import { CRITICIDADES, STATUS_EQUIPAMENTO, gwpDe, statusOs } from '../lib/catalogs';
 import { diffDays, fmtBtu, fmtDate, fmtTr, money, n2, todayStr } from '../lib/format';
 import RotinasEquipamento from '../components/RotinasEquipamento';
+import { ProgramarPreventivaModal } from '../components/ProgramarPreventiva';
 import { useSessao } from '../lib/sessao';
 import { totais } from '../components/widgets';
 
@@ -19,6 +20,7 @@ export function EquipamentoDetalhe() {
   const l = useLookups();
   const navigate = useNavigate();
   const [edit, setEdit] = useState(false);
+  const [prev, setPrev] = useState(false);
   const { pode } = useSessao();
   const eq = l.equipamentoMap.get(id || '');
   const osList = useLiveQuery(() => db.os.toArray(), []) || [];
@@ -71,6 +73,7 @@ export function EquipamentoDetalhe() {
           <>
             {pode('cadastrar') && <Button variant="outline" icon={<Pencil size={16} />} onClick={() => setEdit(true)}>Editar</Button>}
             <Link to={`/ocorrencias?novo=1`}><Button variant="outline" icon={<AlertOctagon size={16} />}>Ocorrência</Button></Link>
+            <Button variant="success" icon={<CalendarCheck2 size={16} />} onClick={() => setPrev(true)}>Preventiva</Button>
             {pode('gerir_os') && <Button icon={<ClipboardPlus size={16} />} onClick={() => navigate(`/os/nova?equipamentoId=${eq.id}&tipo=Corretiva`)}>Abrir OS</Button>}
           </>
         }
@@ -156,6 +159,7 @@ export function EquipamentoDetalhe() {
         </div>
       </div>
       <EntityFormModal cfg={equipamentosCfg} initial={eq} open={edit} onClose={() => setEdit(false)} />
+      <ProgramarPreventivaModal equipamentoId={prev ? eq.id : undefined} onClose={() => setPrev(false)} />
     </div>
   );
 }

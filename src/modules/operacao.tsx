@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertOctagon, ClipboardPlus, Printer, Receipt } from 'lucide-react';
 import type { EntityConfig } from '../components/crud';
-import { Badge, IconButton, useToast } from '../components/ui';
+import { Badge, Button, IconButton, useToast } from '../components/ui';
 import { PecasEditor, ServicosEditor, totais } from '../components/widgets';
 import { db, nowIso } from '../db/db';
 import type { Ocorrencia, Orcamento } from '../db/types';
@@ -60,6 +60,11 @@ export const ocorrenciasCfg: EntityConfig = {
   singular: 'Ocorrência',
   icon: <AlertOctagon size={20} />,
   subtitle: 'Registro de quebras, anomalias e chamados — converta em OS com um clique',
+  headerActions: (
+    <Link to="/ocorrencias/branco/imprimir">
+      <Button variant="outline" icon={<Printer size={16} />}>Formulário em branco</Button>
+    </Link>
+  ),
   numbering: { field: 'numero', kind: 'oc' },
   sort: { key: 'dataHora', dir: 'desc' },
   fields: [
@@ -101,7 +106,12 @@ export const ocorrenciasCfg: EntityConfig = {
   ],
   searchText: (r, l) => [r.numero, r.tipo, r.descricao, r.emitente, l.equipamentoMap.get(r.equipamentoId)?.tag].join(' '),
   defaults: (l) => ({ tipo: 'Chamado', prioridade: 'media', status: 'nao_analisada', dataHora: localDateTimeStr(), unidadeId: l.unidades[0]?.id }),
-  rowActions: (r) => <GerarOsDeOcorrencia oc={r as Ocorrencia} />,
+  rowActions: (r) => (
+    <>
+      <Link to={`/ocorrencias/${r.id}/imprimir`}><IconButton title="Imprimir ocorrência"><Printer size={15} /></IconButton></Link>
+      <GerarOsDeOcorrencia oc={r as Ocorrencia} />
+    </>
+  ),
 };
 
 /* ---------------- Orçamentos ---------------- */

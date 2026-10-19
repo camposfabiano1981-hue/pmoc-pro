@@ -5,10 +5,10 @@ import { CalendarRange, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { db, nowIso, uid } from '../db/db';
 import type { Equipamento, Periodicidade, Rotina } from '../db/types';
 import { PERIODICIDADES, SETORES, diasDaPeriodicidade } from '../lib/catalogs';
-import { addDays, fmtDate, todayStr } from '../lib/format';
+import { fmtDate, todayStr } from '../lib/format';
 import { useLookups } from '../lib/lookups';
 import { useSessao } from '../lib/sessao';
-import { STATUS_ROTINA, aplicarPlano, statusRotina } from '../lib/rotinas';
+import { STATUS_ROTINA, aplicarPlano, proximaData, statusRotina } from '../lib/rotinas';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, Select, cx, useConfirm, useToast } from './ui';
 
 function RotinaRow({ r, editavel, nExec }: { r: Rotina; editavel: boolean; nExec: number }) {
@@ -35,7 +35,7 @@ function RotinaRow({ r, editavel, nExec }: { r: Rotina; editavel: boolean; nExec
         </Select>
       </td>
       <td className="px-1 py-1.5">
-        <Input className="w-20 py-1" type="number" min={1} value={f.intervaloDias} disabled={ro} onChange={(e) => setF({ ...f, intervaloDias: Number(e.target.value) })} onBlur={() => f.intervaloDias !== r.intervaloDias && f.intervaloDias > 0 && salvar({ intervaloDias: f.intervaloDias, personalizada: true, proximaExecucao: r.ultimaExecucao ? addDays(r.ultimaExecucao, f.intervaloDias) : r.proximaExecucao })} />
+        <Input className="w-20 py-1" type="number" min={1} value={f.intervaloDias} disabled={ro} onChange={(e) => setF({ ...f, intervaloDias: Number(e.target.value) })} onBlur={() => f.intervaloDias !== r.intervaloDias && f.intervaloDias > 0 && salvar({ intervaloDias: f.intervaloDias, personalizada: true, proximaExecucao: r.ultimaExecucao ? proximaData(r.ultimaExecucao, f.intervaloDias) : r.proximaExecucao })} />
       </td>
       <td className="px-1 py-1.5">
         <Input className="w-16 py-1" type="number" min={0} value={f.tempoMin} disabled={ro} onChange={(e) => setF({ ...f, tempoMin: Number(e.target.value) })} onBlur={() => f.tempoMin !== r.tempoMin && salvar({ tempoMin: f.tempoMin })} />
