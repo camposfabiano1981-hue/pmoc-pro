@@ -49,7 +49,9 @@ Também: busca global, tema claro/escuro, layout para celular, etiquetas QR em l
 3. O workflow `.github/workflows/deploy.yml` roda os testes, gera o build e publica. Em ~2 minutos o sistema estará em
    `https://SEU-USUARIO.github.io/pmoc-pro/`.
 
-A cada `git push` na branch `main` o site é atualizado automaticamente.
+A cada `git push` na branch `main` o site é atualizado automaticamente (acompanhe em **Actions**; a publicação leva de 1 a 3 minutos depois que o job começa).
+
+A versão publicada aparece no rodapé do menu lateral (ex.: *Versão 862464e*). Quem estiver com o sistema aberto recebe o aviso **"Há uma nova versão — Atualizar agora"** assim que uma publicação nova entra no ar; se preferir, recarregue com **Ctrl+F5** (no celular, feche e abra o app).
 
 ## Rodar no computador
 

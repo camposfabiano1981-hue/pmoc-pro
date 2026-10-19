@@ -26,6 +26,6 @@ ensureBase()
 // PWA: funciona offline em campo (apenas em produção e fora de iframes)
 if ('serviceWorker' in navigator && import.meta.env.PROD && window.self === window.top && location.protocol === 'https:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   });
 }

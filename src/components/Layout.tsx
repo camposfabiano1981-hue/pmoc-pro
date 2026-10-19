@@ -7,6 +7,7 @@ import {
 import { useSessao, type Perfil } from '../lib/sessao';
 import { Badge, Button, Input, Modal } from './ui';
 import { useLookups } from '../lib/lookups';
+import { BUILD, VERSAO, atualizarApp, useNovaVersao } from '../lib/versao';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { Link } from 'react-router-dom';
@@ -178,6 +179,7 @@ export default function Layout() {
     if (usuario.perfil === 'tecnico' && loc.pathname === '/') navigate('/campo', { replace: true });
   }, [usuario.perfil, loc.pathname, navigate]);
   const demo = useLiveQuery(async () => (await db.settings.get('demo'))?.value === true, [], false);
+  const novaVersao = useNovaVersao();
 
   const sidebar = (
     <nav className="flex h-full flex-col">
@@ -217,7 +219,10 @@ export default function Layout() {
           </div>
         ))}
       </div>
-      <div className="border-t border-white/10 px-4 py-3 text-[11px] text-slate-500">Lei 13.589/2018 · Portaria 3.523/98 · RE 09/2003</div>
+      <div className="border-t border-white/10 px-4 py-3 text-[11px] text-slate-500">
+        Lei 13.589/2018 · Portaria 3.523/98 · RE 09/2003
+        <span className="mt-0.5 block" title={`Publicada em ${new Date(BUILD).toLocaleString('pt-BR')}`}>Versão {VERSAO.split('-')[0]} · {new Date(BUILD).toLocaleDateString('pt-BR')}</span>
+      </div>
     </nav>
   );
 
@@ -270,6 +275,12 @@ export default function Layout() {
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         </header>
+        {novaVersao && (
+          <div className="flex flex-wrap items-center justify-center gap-2 border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-sm text-emerald-900 print:hidden dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+            <span>Há uma <b>nova versão</b> do PMOC Pro publicada.</span>
+            <Button size="sm" variant="success" onClick={atualizarApp}>Atualizar agora</Button>
+          </div>
+        )}
         {demo && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-900 print:hidden dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
             Você está vendo <b>dados fictícios de demonstração</b>. Para usar com seus dados, vá em{' '}
