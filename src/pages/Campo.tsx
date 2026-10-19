@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CheckCheck, ChevronDown, ChevronRight, ClipboardCheck, HardHat, MapPin, Pause, Play, Send, Wrench } from 'lucide-react';
+import { CheckCheck, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList, HardHat, MapPin, Pause, Play, Send, Wrench } from 'lucide-react';
 import { db, nowIso } from '../db/db';
-import type { OS } from '../db/types';
+import type { OS, Rotina } from '../db/types';
 import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, Select, Textarea, cx, useConfirm, useToast } from '../components/ui';
 import { PecasEditor, PhotoGallery, SignaturePad } from '../components/widgets';
 import { MedicoesPanel, TaskRow, executarPendentes } from '../components/osParts';
@@ -12,7 +12,8 @@ import { useSessao, assinaturaUsuario } from '../lib/sessao';
 import { OS_FINALIZADAS, prioridade, statusOs } from '../lib/catalogs';
 import { addDays, fmtDate, fmtHoras, localDateTimeStr, todayStr } from '../lib/format';
 import { comHistorico, concluirOS, contagemTarefas, horasTrabalhadas, isAtrasada, tempoPrevisto } from '../lib/osHelpers';
-import { statusItem } from '../lib/rotinas';
+import { itemDeRotina, statusItem } from '../lib/rotinas';
+import { IncluirRotinasModal, RemoverTarefaModal } from '../components/RotinasOs';
 
 /** Lista de OS do técnico logado (ou de um técnico escolhido pelo gestor). */
 export function CampoHome() {
@@ -103,11 +104,13 @@ export function CampoOS() {
   const l = useLookups();
   const toast = useToast();
   const confirm = useConfirm();
-  const { usuario } = useSessao();
+  const { usuario, pode } = useSessao();
   const quem = assinaturaUsuario(usuario);
   const [os, setOs] = useState<OS | null | undefined>(undefined);
   const [aberto, setAberto] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  const [incluir, setIncluir] = useState<string | null>(null);
+  const [remover, setRemover] = useState<{ eq: number; k: number } | null>(null);
   const loaded = useRef(false);
   const eu = usuario.profissionalId;
 
@@ -139,6 +142,23 @@ export function CampoOS() {
   const emExec = os.status === 'em_execucao';
   const unidade = l.unidadeMap.get(os.unidadeId || '');
   const executor = eu || os.responsavelId;
+  const itemIncluir = os.equipamentos.find((e) => e.equipamentoId === incluir);
+  const tarefaRemover = remover ? os.equipamentos[remover.eq]?.checklist[remover.k] : undefined;
+  const incluirRotinas = (rots: Rotina[]) => {
+    const eqTag = l.equipamentoMap.get(incluir || '')?.tag;
+    const o = { ...os, equipamentos: os.equipamentos.map((e) => (e.equipamentoId === incluir ? { ...e, checklist: [...e.checklist, ...rots.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(itemDeRotina)] } : e)) };
+    setOs(comHistorico(o, `${rots.length} rotina(s) incluída(s) em ${eqTag}: ${rots.map((r) => r.descricao).join('; ')}`, quem));
+    toast(`${rots.length} rotina(s) incluída(s).`);
+  };
+  const excluirTarefa = async (desativar: boolean) => {
+    if (!remover || !tarefaRemover) return;
+    const eqTag = l.equipamentoMap.get(os.equipamentos[remover.eq].equipamentoId)?.tag;
+    const o = { ...os, equipamentos: os.equipamentos.map((e, i) => (i === remover.eq ? { ...e, checklist: e.checklist.filter((_, k) => k !== remover.k) } : e)) };
+    if (desativar && tarefaRemover.rotinaId) await db.rotinas.update(tarefaRemover.rotinaId, { ativa: false, updatedAt: nowIso() });
+    setOs(comHistorico(o, `Rotina excluída de ${eqTag}: ${tarefaRemover.descricao}${desativar ? ' (desativada no equipamento)' : ''}`, quem));
+    toast('Excluída desta OS.');
+    setRemover(null);
+  };
 
   const iniciar = () => {
     const agora = localDateTimeStr();
@@ -217,10 +237,17 @@ export function CampoOS() {
               </button>
               {open && (
                 <div className="space-y-3 border-t border-slate-100 p-3 dark:border-slate-800">
-                  {!readOnly && item.checklist.length > 0 && (
-                    <Button size="sm" variant="outline" icon={<CheckCheck size={14} />} onClick={() => setItem({ checklist: executarPendentes(item.checklist, executor) })}>
-                      Lançar todas as pendentes como E
-                    </Button>
+                  {!readOnly && (
+                    <div className="flex flex-wrap gap-2">
+                      {item.checklist.length > 0 && (
+                        <Button size="sm" variant="outline" icon={<CheckCheck size={14} />} onClick={() => setItem({ checklist: executarPendentes(item.checklist, executor) })}>
+                          Lançar todas as pendentes como E
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" icon={<ClipboardList size={14} />} onClick={() => setIncluir(item.equipamentoId)}>
+                        Incluir rotinas
+                      </Button>
+                    </div>
                   )}
                   {item.checklist.map((c, k) => (
                     <TaskRow
@@ -231,6 +258,7 @@ export function CampoOS() {
                       executorLogado={executor}
                       profissionais={l.profissionais}
                       onChange={(p) => setItem({ checklist: item.checklist.map((x, j) => (j === k ? { ...x, ...p } : x)) })}
+                      onRemove={pode('gerir_os') ? () => setRemover({ eq: i, k }) : undefined}
                     />
                   ))}
                   {!emExec && !readOnly && item.checklist.length > 0 && <p className="text-xs text-slate-500">Faça o check-in para lançar as tarefas.</p>}
@@ -249,6 +277,9 @@ export function CampoOS() {
           );
         })}
       </div>
+
+      {itemIncluir && <IncluirRotinasModal open equipamentoId={itemIncluir.equipamentoId} osId={os.id} checklist={itemIncluir.checklist} onClose={() => setIncluir(null)} onIncluir={incluirRotinas} />}
+      <RemoverTarefaModal tarefa={tarefaRemover} podeDesativar={pode('cadastrar')} onClose={() => setRemover(null)} onConfirmar={excluirTarefa} />
 
       <Card title="Materiais utilizados" className="mt-4">
         <PecasEditor itens={os.pecas} onChange={(pecas) => upd({ pecas })} readOnly={readOnly} ocultarPrecos />

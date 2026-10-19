@@ -98,6 +98,17 @@ export function TaskRow({ c, onChange, onRemove, readOnly, executorLogado, execu
               {s.value}
             </button>
           ))}
+          {!editable && onRemove && !readOnly && (
+            <button
+              type="button"
+              title="Excluir rotina desta OS"
+              aria-label={`Excluir ${c.descricao}`}
+              onClick={onRemove}
+              className={cx('inline-flex items-center justify-center rounded-md border border-slate-300 text-slate-500 hover:border-rose-400 hover:bg-rose-50 hover:text-rose-600 dark:border-slate-600 dark:hover:bg-rose-950', grande ? 'h-10 w-10' : 'h-8 w-8')}
+            >
+              <Trash2 size={grande ? 16 : 14} />
+            </button>
+          )}
         </div>
       </div>
 
