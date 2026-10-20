@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CheckCheck, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList, HardHat, MapPin, Pause, Play, Send, Wrench } from 'lucide-react';
+import { CheckCheck, ChevronDown, ChevronRight, ClipboardCheck, ClipboardList, HardHat, ListChecks, MapPin, Pause, Play, Send, Wrench } from 'lucide-react';
 import { db, nowIso } from '../db/db';
 import type { OS, Rotina } from '../db/types';
 import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, Select, Textarea, cx, useConfirm, useToast } from '../components/ui';
@@ -13,7 +13,7 @@ import { OS_FINALIZADAS, prioridade, statusOs } from '../lib/catalogs';
 import { addDays, fmtDate, fmtHoras, localDateTimeStr, todayStr } from '../lib/format';
 import { comHistorico, concluirOS, contagemTarefas, horasTrabalhadas, isAtrasada, tempoPrevisto } from '../lib/osHelpers';
 import { itemDeRotina, statusItem } from '../lib/rotinas';
-import { IncluirRotinasModal, RemoverTarefaModal } from '../components/RotinasOs';
+import { IncluirRotinasModal, RemoverTarefaModal, rotinasDisponiveis, transferirRotinas } from '../components/RotinasOs';
 
 /** Lista de OS do técnico logado (ou de um técnico escolhido pelo gestor). */
 export function CampoHome() {
@@ -144,11 +144,33 @@ export function CampoOS() {
   const executor = eu || os.responsavelId;
   const itemIncluir = os.equipamentos.find((e) => e.equipamentoId === incluir);
   const tarefaRemover = remover ? os.equipamentos[remover.eq]?.checklist[remover.k] : undefined;
-  const incluirRotinas = (rots: Rotina[]) => {
-    const eqTag = l.equipamentoMap.get(incluir || '')?.tag;
-    const o = { ...os, equipamentos: os.equipamentos.map((e) => (e.equipamentoId === incluir ? { ...e, checklist: [...e.checklist, ...rots.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(itemDeRotina)] } : e)) };
+  const incluirRotinas = (rots: Rotina[], equipamentoId = incluir) => {
+    const eqTag = l.equipamentoMap.get(equipamentoId || '')?.tag;
+    const o = { ...os, equipamentos: os.equipamentos.map((e) => (e.equipamentoId === equipamentoId ? { ...e, checklist: [...e.checklist, ...rots.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(itemDeRotina)] } : e)) };
     setOs(comHistorico(o, `${rots.length} rotina(s) incluída(s) em ${eqTag}: ${rots.map((r) => r.descricao).join('; ')}`, quem));
     toast(`${rots.length} rotina(s) incluída(s).`);
+  };
+  const incluirTodas = async (item: OS['equipamentos'][number]) => {
+    const { livres, transferiveis, lancadasEmOutra } = await rotinasDisponiveis(item.equipamentoId, os.id, item.checklist);
+    let movidas: Rotina[] = [];
+    if (transferiveis.length) {
+      const nums = [...new Set(transferiveis.map((t) => t.numero))].join(', ');
+      const ok = await confirm({
+        title: 'Rotinas já programadas em outra OS',
+        message: `${transferiveis.length} rotina(s) deste equipamento estão na OS ${nums}, ainda sem lançamento. Transferir para esta OS? Elas saem da outra OS (sem duplicar).`,
+        confirmText: 'Transferir para esta OS',
+      });
+      if (ok) {
+        await transferirRotinas(transferiveis, os.numero, quem);
+        movidas = transferiveis.map((t) => t.rotina);
+      }
+    }
+    const todas = [...livres, ...movidas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+    if (!todas.length) {
+      toast(transferiveis.length ? 'Nenhuma rotina incluída.' : lancadasEmOutra ? `As rotinas que faltam já foram lançadas em outra OS (${lancadasEmOutra}).` : 'Todas as rotinas ativas do equipamento já estão nesta OS.', 'info');
+      return;
+    }
+    incluirRotinas(todas, item.equipamentoId);
   };
   const excluirTarefa = async (desativar: boolean) => {
     if (!remover || !tarefaRemover) return;
@@ -244,8 +266,11 @@ export function CampoOS() {
                           Lançar todas as pendentes como E
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" icon={<ClipboardList size={14} />} onClick={() => setIncluir(item.equipamentoId)}>
-                        Incluir rotinas
+                      <Button size="sm" variant="outline" icon={<ClipboardList size={14} />} onClick={() => incluirTodas(item)}>
+                        Incluir rotinas do equipamento
+                      </Button>
+                      <Button size="sm" variant="outline" icon={<ListChecks size={14} />} onClick={() => setIncluir(item.equipamentoId)}>
+                        Incluir rotinas (individual)
                       </Button>
                     </div>
                   )}
@@ -278,7 +303,7 @@ export function CampoOS() {
         })}
       </div>
 
-      {itemIncluir && <IncluirRotinasModal open equipamentoId={itemIncluir.equipamentoId} osId={os.id} checklist={itemIncluir.checklist} onClose={() => setIncluir(null)} onIncluir={incluirRotinas} />}
+      {itemIncluir && <IncluirRotinasModal open equipamentoId={itemIncluir.equipamentoId} osId={os.id} osNumero={os.numero} usuario={quem} checklist={itemIncluir.checklist} onClose={() => setIncluir(null)} onIncluir={(rots) => incluirRotinas(rots)} />}
       <RemoverTarefaModal tarefa={tarefaRemover} podeDesativar={pode('cadastrar')} onClose={() => setRemover(null)} onConfirmar={excluirTarefa} />
 
       <Card title="Materiais utilizados" className="mt-4">

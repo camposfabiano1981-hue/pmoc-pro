@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  CheckCheck, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, FileText, Pause, Play, Plus, Printer, RotateCcw, ShieldCheck, Square, Star, Trash2, XCircle,
+  CheckCheck, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, FileText, ListChecks, Pause, Play, Plus, Printer, RotateCcw, ShieldCheck, Square, Star, Trash2, XCircle,
 } from 'lucide-react';
 import { db, nowIso, uid } from '../db/db';
 import type { ItemOsEquip, OS, Rotina, StatusOS } from '../db/types';
 import { Badge, Button, Card, Field, IconButton, Input, PageHeader, Select, Tabs, Textarea, cx, useConfirm, useToast } from '../components/ui';
 import { PecasEditor, PhotoGallery, ServicosEditor, SignaturePad, totais } from '../components/widgets';
 import { MedicoesPanel, TaskRow, executarPendentes } from '../components/osParts';
-import { IncluirRotinasModal, RemoverTarefaModal } from '../components/RotinasOs';
+import { IncluirRotinasModal, RemoverTarefaModal, rotinasDisponiveis, transferirRotinas } from '../components/RotinasOs';
 import { useLookups, equipLabel } from '../lib/lookups';
 import { useSessao, assinaturaUsuario } from '../lib/sessao';
 import { FLUIDOS, OS_FINALIZADAS, PRIORIDADES, SETORES, STATUS_EQUIPAMENTO, STATUS_OS, TIPOS_OS, statusOs } from '../lib/catalogs';
@@ -24,6 +24,8 @@ function EquipCard({ item, os, onChange, onRemove, onHistorico, readOnly }: { it
   const l = useLookups();
   const toast = useToast();
   const { usuario, pode } = useSessao();
+  const confirm = useConfirm();
+  const quem = assinaturaUsuario(usuario);
   const [incluir, setIncluir] = useState(false);
   const [remover, setRemover] = useState<number | null>(null);
   const eq = l.equipamentoMap.get(item.equipamentoId);
@@ -38,6 +40,28 @@ function EquipCard({ item, os, onChange, onRemove, onHistorico, readOnly }: { it
     onChange({ checklist: [...item.checklist, ...rots.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(itemDeRotina)] });
     onHistorico(`${rots.length} rotina(s) incluída(s) em ${eq?.tag || 'equipamento'}: ${rots.map((r) => r.descricao).join('; ')}`);
     toast(`${rots.length} rotina(s) incluída(s).`);
+  };
+  const incluirTodas = async () => {
+    const { livres, transferiveis, lancadasEmOutra } = await rotinasDisponiveis(item.equipamentoId, os.id, item.checklist);
+    let movidas: Rotina[] = [];
+    if (transferiveis.length) {
+      const nums = [...new Set(transferiveis.map((t) => t.numero))].join(', ');
+      const ok = await confirm({
+        title: 'Rotinas já programadas em outra OS',
+        message: `${transferiveis.length} rotina(s) deste equipamento estão na OS ${nums}, ainda sem lançamento. Transferir para esta OS? Elas saem da outra OS (sem duplicar).${livres.length ? ` As outras ${livres.length} rotina(s) livres serão incluídas de qualquer forma.` : ''}`,
+        confirmText: 'Transferir para esta OS',
+      });
+      if (ok) {
+        await transferirRotinas(transferiveis, os.numero, quem);
+        movidas = transferiveis.map((t) => t.rotina);
+      }
+    }
+    const todas = [...livres, ...movidas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+    if (!todas.length) {
+      toast(transferiveis.length ? 'Nenhuma rotina incluída.' : lancadasEmOutra ? `As rotinas que faltam já foram lançadas em outra OS (${lancadasEmOutra}).` : 'Todas as rotinas ativas do equipamento já estão nesta OS.', 'info');
+      return;
+    }
+    incluirRotinas(todas);
   };
   const excluirTarefa = async (desativar: boolean) => {
     if (remover === null) return;
@@ -95,7 +119,10 @@ function EquipCard({ item, os, onChange, onRemove, onHistorico, readOnly }: { it
               <Button size="sm" variant="outline" icon={<CheckCheck size={14} />} onClick={() => onChange({ checklist: executarPendentes(item.checklist, executorLogado || os.responsavelId) })}>
                 Lançar pendentes como executadas (E)
               </Button>
-              <Button size="sm" variant="outline" icon={<ClipboardList size={14} />} onClick={() => setIncluir(true)}>
+              <Button size="sm" variant="outline" icon={<ClipboardList size={14} />} onClick={incluirTodas}>
+                Incluir rotinas do equipamento
+              </Button>
+              <Button size="sm" variant="outline" icon={<ListChecks size={14} />} onClick={() => setIncluir(true)}>
                 Incluir rotinas (individual)
               </Button>
               <Button size="sm" variant="outline" icon={<Plus size={14} />} onClick={() => onChange({ checklist: [...item.checklist, { descricao: '', tipo: 'check', resultado: '', execucao: '' }] })}>
@@ -103,7 +130,7 @@ function EquipCard({ item, os, onChange, onRemove, onHistorico, readOnly }: { it
               </Button>
             </div>
           )}
-          {item.checklist.length === 0 && <p className="text-sm text-slate-500">Nenhuma tarefa. Use “Incluir rotinas (individual)” para escolher as rotinas do equipamento ou crie uma tarefa avulsa.</p>}
+          {item.checklist.length === 0 && <p className="text-sm text-slate-500">Nenhuma tarefa. Inclua as rotinas do equipamento (todas ou individualmente) ou crie uma tarefa avulsa.</p>}
           <div className="space-y-2">
             {item.checklist.map((c, i) => (
               <TaskRow
@@ -118,7 +145,7 @@ function EquipCard({ item, os, onChange, onRemove, onHistorico, readOnly }: { it
               />
             ))}
           </div>
-          <IncluirRotinasModal open={incluir} equipamentoId={item.equipamentoId} osId={os.id} checklist={item.checklist} onClose={() => setIncluir(false)} onIncluir={incluirRotinas} />
+          <IncluirRotinasModal open={incluir} equipamentoId={item.equipamentoId} osId={os.id} osNumero={os.numero} usuario={quem} checklist={item.checklist} onClose={() => setIncluir(false)} onIncluir={incluirRotinas} />
           <RemoverTarefaModal tarefa={remover === null ? undefined : item.checklist[remover]} podeDesativar={pode('cadastrar')} onClose={() => setRemover(null)} onConfirmar={excluirTarefa} />
 
           <div>
@@ -524,9 +551,9 @@ export default function OsEdit() {
                 </Field>
                 <Button
                   disabled={!addEq}
-                  onClick={async () => {
-                    const rots = os.tipo === 'Preventiva' ? (await db.rotinas.where('equipamentoId').equals(addEq).toArray()).filter((r) => r.ativa && r.proximaExecucao <= (os.prazo || todayStr())) : [];
-                    upd({ equipamentos: [...os.equipamentos, { equipamentoId: addEq, checklist: rots.sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)).map(itemDeRotina), medicoes: {} }] });
+                  onClick={() => {
+                    // tarefas em branco: a OS pode ser corretiva, instalação, visita técnica etc.; as rotinas são incluídas pelos botões do equipamento
+                    upd({ equipamentos: [...os.equipamentos, { equipamentoId: addEq, checklist: [], medicoes: {} }] });
                     setAddEq('');
                   }}
                 >
