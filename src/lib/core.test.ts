@@ -2,7 +2,8 @@ import { projetar, proximaData, rotinasDoPlano, statusRotina } from './rotinas';
 import { marcarRotina } from './marcas';
 import { inteiroPorExtenso, valorPorExtenso } from './extenso';
 import { clausulasContrato, mesesVigencia, ordinal } from './contrato';
-import type { Equipamento, Rotina } from '../db/types';
+import type { CargoPreco, Equipamento, Rotina } from '../db/types';
+import { FAIXAS_BDI, PARAMETROS_PADRAO, analisarExequibilidade, calcBdi, calcularEstudo, custoCargo, encargosGrupoA, farol, horasMes, horasPlanoMes, round2, simplesAnexoIII, tributosFaturamento } from './precificacao';
 import { describe, expect, it } from 'vitest';
 import { isDue, monthIndex, matrizAnual, foraDaFaixa } from './schedule';
 import { diagnosticar, tSat } from './hvac';
@@ -153,5 +154,73 @@ describe('contrato', () => {
     const pub = clausulasContrato({ ct: { ...base, modelo: 'publico' }, empresa: { razaoSocial: 'Empresa' } });
     expect(pub.some((c) => c.titulo === 'DA GESTÃO E FISCALIZAÇÃO')).toBe(true);
     expect(pub.map((c) => c.paragrafos.map((p) => p.t).join(' ')).join(' ')).toContain('14.133/2021');
+  });
+});
+
+describe('precificação', () => {
+  it('alíquota efetiva do Simples Nacional (Anexo III)', () => {
+    const s = simplesAnexoIII(360000);
+    expect(s.faixa).toBe(2);
+    expect(s.efetiva).toBeCloseTo(8.6, 6); // (360.000 × 11,2% − 9.360) ÷ 360.000
+    expect(Object.values(s.tributos).reduce((a, b) => a + b, 0)).toBeCloseTo(8.6, 6);
+    expect(simplesAnexoIII(100000).efetiva).toBeCloseTo(6, 6);
+  });
+  it('limita o ISS do Simples a 5% e redistribui aos federais', () => {
+    const s = simplesAnexoIII(3000000); // 5ª faixa: 16,812% efetiva; ISS 33,5% → 5,63% → limitado a 5%
+    expect(s.faixa).toBe(5);
+    expect(s.tributos.iss).toBeCloseTo(5, 6);
+    expect(Object.values(s.tributos).reduce((a, b) => a + b, 0)).toBeCloseTo(s.efetiva, 6);
+  });
+  it('encargos do grupo A e CPRB por regime (reoneração 2026)', () => {
+    expect(encargosGrupoA({ ...PARAMETROS_PADRAO, regime: 'simples' }).total).toBe(8);
+    expect(encargosGrupoA({ ...PARAMETROS_PADRAO, regime: 'presumido' }).total).toBeCloseTo(36.8, 6);
+    const des = { ...PARAMETROS_PADRAO, regime: 'presumido' as const, desonerada: true, anoBase: 2026 };
+    expect(encargosGrupoA(des).total).toBeCloseTo(26.8, 6); // INSS 10% sobre a folha em 2026
+    expect(tributosFaturamento(des).itens.find((i) => i.nome.startsWith('CPRB'))!.aliquota).toBeCloseTo(2.7, 6); // 60% de 4,5%
+    expect(tributosFaturamento({ ...PARAMETROS_PADRAO, regime: 'presumido', issAliquota: 5 }).total).toBeCloseTo(8.65, 6);
+  });
+  it('BDI pela fórmula do Acórdão TCU 2622/2013', () => {
+    const { bdi, df } = calcBdi({ ac: 4, s: 0.4, r: 1, g: 0.4, l: 7, prazoDias: 30, taxaMes: 1 }, 8.65);
+    expect(df).toBeCloseTo(1, 6);
+    expect(bdi).toBeCloseTo(((1.058 * 1.01 * 1.07) / (1 - 0.0865) - 1) * 100, 6);
+    expect(farol(4, FAIXAS_BDI.ac)).toBe('dentro');
+    expect(farol(10, FAIXAS_BDI.l)).toBe('acima');
+  });
+  it('horas do plano e custo-hora do cargo', () => {
+    expect(horasPlanoMes(PLANO_SPLIT)).toBeCloseTo(2.41, 1); // ≈ 28,9 h/ano pelo plano Split/Janela
+    const h = horasMes(PARAMETROS_PADRAO); // 222 dias × 8,8 h ÷ 12
+    expect(h.disponiveis).toBeCloseTo(162.8, 1);
+    const c = custoCargo({ salarioBase: 2000 }, { ...PARAMETROS_PADRAO, regime: 'simples' });
+    expect(c.remuneracao).toBe(2000);
+    expect(c.modulo21).toBeCloseTo(2000 * 0.2043, 6);
+    expect(c.custoHora).toBeCloseTo(c.total / h.produtivas, 6);
+    expect(custoCargo({ salarioBase: 2000, periculosidade: true, insalubridade: 20 }, PARAMETROS_PADRAO).remuneracao).toBeCloseTo(2000 + 600 + 324.2, 6);
+  });
+  it('estudo de preço: rateio, preço unitário, total e exequibilidade', () => {
+    const cargos = new Map([['t', { id: 't', nome: 'Técnico', salarioBase: 3000, ativo: true, createdAt: '', updatedAt: '' } as CargoPreco]]);
+    const planos = new Map([[PLANO_SPLIT.id, PLANO_SPLIT]]);
+    const r = calcularEstudo(
+      {
+        equipe: [{ cargoId: 't', quantidade: 1 }],
+        itens: [{ id: '1', descricao: 'Split', planoId: PLANO_SPLIT.id, fatorTempo: 1, corretivaPct: 10, materiaisMes: 5, quantidade: 10 }],
+        deslocamento: { visitasMes: 0, minutosVisita: 0, kmMes: 0, custoKm: 0 },
+        custosFixos: [{ id: 'f', descricao: 'Veículo', valorMensal: 500 }],
+        rateio: 'horas',
+        bdi: PARAMETROS_PADRAO.bdi,
+        vigenciaMeses: 12,
+        valorEstimadoMensal: 10000,
+        tipoServico: 'engenharia',
+      },
+      { params: PARAMETROS_PADRAO, cargos, planos },
+    );
+    const it = r.itens[0];
+    expect(it.rateio).toBeCloseTo(50, 6);
+    expect(it.horasCorretivas).toBeCloseTo(it.horasPreventivas * 0.1, 6);
+    expect(it.precoUnit).toBeCloseTo(round2(it.custoDireto * (1 + r.bdi / 100)), 6);
+    expect(r.precoMensal).toBeCloseTo(it.precoUnit * 10, 6);
+    expect(r.lanceMinimoMensal).toBeLessThan(r.precoMensal);
+    expect(analisarExequibilidade(7000, 10000, 'engenharia', 12).alertas.some((a) => a.texto.includes('75%'))).toBe(true);
+    expect(analisarExequibilidade(8000, 10000, 'engenharia', 12).garantiaAdicional).toBe(24000);
+    expect(analisarExequibilidade(4500, 10000, 'comum', 12).alertas.some((a) => a.texto.includes('50%'))).toBe(true);
   });
 });

@@ -24,6 +24,14 @@ import { PlanoEdit, PlanosList } from './pages/Planos';
 import { PmocDocumento, pmocsCfg } from './pages/Pmoc';
 import Cronograma from './pages/Cronograma';
 import Preventivas from './pages/Preventivas';
+import PainelComercial from './pages/PainelComercial';
+import { oportunidadesCfg } from './modules/comercial';
+import { cargosCfg } from './modules/precificacao';
+import EstudosPage from './pages/precificacao/Estudos';
+import EstudoEditor from './pages/precificacao/EstudoEditor';
+import EstudoPrint from './pages/precificacao/EstudoPrint';
+import TributosPage from './pages/precificacao/Tributos';
+import CustosPage from './pages/precificacao/Custos';
 import { EquipamentoDetalhe, Etiquetas } from './pages/Equipamento';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
@@ -55,6 +63,14 @@ export default function App() {
                 <Route path="pmoc/:id/documento" element={<PmocDocumento />} />
                 <Route path="cronograma" element={<Cronograma />} />
                 <Route path="preventivas" element={<Preventivas />} />
+                <Route path="comercial" element={<PainelComercial />} />
+                <Route path="oportunidades" element={<EntityPage key="op" cfg={oportunidadesCfg} />} />
+                <Route path="precificacao" element={<EstudosPage />} />
+                <Route path="precificacao/equipe" element={<EntityPage key="cargos" cfg={cargosCfg} />} />
+                <Route path="precificacao/tributos" element={<TributosPage />} />
+                <Route path="precificacao/custos" element={<CustosPage />} />
+                <Route path="precificacao/:id" element={<EstudoEditor />} />
+                <Route path="precificacao/:id/imprimir" element={<EstudoPrint />} />
                 <Route path="planos" element={<PlanosList />} />
                 <Route path="planos/:id" element={<PlanoEdit />} />
                 <Route path="qualidade-ar" element={<EntityPage key="ar" cfg={qualidadeArCfg} />} />

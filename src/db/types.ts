@@ -575,3 +575,160 @@ export interface Setting {
   key: string;
   value: unknown;
 }
+
+/* ===================== Comercial ===================== */
+export type EtapaOportunidade = 'prospeccao' | 'analise' | 'proposta' | 'disputa' | 'habilitacao' | 'ganha' | 'perdida' | 'desistencia';
+
+/** Oportunidade comercial: licitação pública ou proposta para cliente privado (funil de vendas). */
+export interface Oportunidade extends Base {
+  numero: string;
+  titulo: string;
+  tipo: 'licitacao' | 'privado';
+  etapa: EtapaOportunidade;
+  clienteId?: ID;
+  /** Órgão ou empresa, quando ainda não é cliente cadastrado */
+  orgao?: string;
+  modalidade?: string;
+  criterio?: string;
+  numeroEdital?: string;
+  processo?: string;
+  portal?: string;
+  linkEdital?: string;
+  cidade?: string;
+  uf?: string;
+  objeto?: string;
+  dataSessao?: string;
+  prazoPropostas?: string;
+  /** Valor estimado/orçado pelo órgão (total da contratação) */
+  valorEstimado?: number;
+  /** Valor da nossa proposta (total da contratação) */
+  valorProposta?: number;
+  vigenciaMeses?: number;
+  responsavelId?: ID;
+  estudoId?: ID;
+  contratoId?: ID;
+  vencedor?: string;
+  valorVencedor?: number;
+  motivoResultado?: string;
+  observacoes?: string;
+}
+
+/* ===================== Precificação ===================== */
+/** Cargo da equipe com remuneração e benefícios da convenção coletiva (base do custo-hora). */
+export interface CargoPreco extends Base {
+  nome: string;
+  cct?: string;
+  salarioBase: number;
+  periculosidade?: boolean;
+  /** Grau de insalubridade sobre o salário mínimo (%) */
+  insalubridade?: number;
+  outrosAdicionais?: number;
+  valeTransporteDia?: number;
+  valeAlimentacaoDia?: number;
+  diasMes?: number;
+  planoSaude?: number;
+  seguroVida?: number;
+  outrosBeneficios?: number;
+  uniformeEpiMes?: number;
+  examesTreinamentoMes?: number;
+  ativo: boolean;
+  observacoes?: string;
+}
+
+export interface BdiParams {
+  ac: number;
+  s: number;
+  r: number;
+  g: number;
+  l: number;
+  /** Prazo médio de recebimento (dias) e taxa financeira mensal (%) para a despesa financeira */
+  prazoDias: number;
+  taxaMes: number;
+}
+
+export interface ItemEstudo {
+  id: string;
+  descricao: string;
+  tipoEquip?: string;
+  faixa?: string;
+  planoId?: ID;
+  /** Horas/mês por equipamento informadas manualmente (substituem as do plano) */
+  horasManual?: number;
+  /** Fator de porte/acesso sobre o tempo do plano */
+  fatorTempo: number;
+  /** Reserva para manutenção corretiva (% sobre as horas preventivas) */
+  corretivaPct: number;
+  /** Materiais de consumo por equipamento/mês (R$) */
+  materiaisMes: number;
+  quantidade: number;
+}
+
+export interface CustoFixoEstudo {
+  id: string;
+  descricao: string;
+  valorMensal: number;
+}
+
+/** Estudo de preço (composição da proposta) — modelo por equipamento. */
+export interface EstudoPreco extends Base {
+  numero: string;
+  titulo: string;
+  status: 'elaboracao' | 'enviado' | 'ganho' | 'perdido';
+  oportunidadeId?: ID;
+  clienteId?: ID;
+  orgao?: string;
+  modelo: 'equipamento';
+  /** Serviço de engenharia (art. 59, §4º) ou serviço comum (IN 73/2022) — define os limites de exequibilidade */
+  tipoServico: 'engenharia' | 'comum';
+  vigenciaMeses: number;
+  /** Valor estimado pelo órgão, por mês, para comparação */
+  valorEstimadoMensal?: number;
+  equipe: { cargoId: ID; quantidade: number }[];
+  itens: ItemEstudo[];
+  deslocamento: { visitasMes: number; minutosVisita: number; kmMes: number; custoKm: number };
+  custosFixos: CustoFixoEstudo[];
+  rateio: 'horas' | 'equipamentos';
+  bdi: BdiParams;
+  /** ISS do município de execução (substitui o dos parâmetros) */
+  issAliquota?: number;
+  /** Memória da carga tributária na data da proposta (base para reequilíbrio — LC 214/2025, arts. 373 a 377) */
+  tributosBase?: { data: string; regime: string; itens: { nome: string; aliquota: number }[]; total: number; porFora: number };
+  observacoes?: string;
+}
+
+/** Parâmetros gerais de precificação (regime tributário, encargos, provisões, horas e BDI padrão). */
+export interface ParametrosPreco {
+  regime: 'simples' | 'presumido' | 'real';
+  /** Receita bruta dos últimos 12 meses (Simples Nacional) */
+  rbt12: number;
+  /** Excluir as parcelas de IRPJ e CSLL do DAS na taxa de tributos do BDI */
+  simplesExcluirIrpjCsll: boolean;
+  issAliquota: number;
+  /** PIS + Cofins efetivos no Lucro Real (após créditos) */
+  pisCofinsReal: number;
+  desonerada: boolean;
+  cprbAliquota: number;
+  anoBase: number;
+  rat: number;
+  fap: number;
+  terceiros: number;
+  fgts: number;
+  /** Tributos calculados "por fora" do preço (cenários da reforma: CBS/IBS) */
+  tributosPorFora: number;
+  salarioMinimo: number;
+  decimoTerceiro: number;
+  feriasTerco: number;
+  avisoIndenizado: number;
+  fgtsAvisoIndenizado: number;
+  avisoTrabalhado: number;
+  multaFgts: number;
+  jornadaSemanal: number;
+  feriadosAno: number;
+  feriasDiasUteis: number;
+  ausenciasDias: number;
+  produtividade: number;
+  bdi: BdiParams;
+  custosPadrao: { descricao: string; valorMensal: number }[];
+  materiaisPadraoMes: number;
+  custoKmPadrao: number;
+}

@@ -157,3 +157,5 @@ export const MEDICOES_CAMPOS: { key: keyof OS['equipamentos'][number]['medicoes'
   { key: 'tLinhaLiquido', label: 'T. linha líquido', unidade: '°C' },
 ];
 
+/** OS do fluxo de preventivas (gerada pela Central ou do tipo Preventiva). */
+export const ehPreventiva = (o: OS) => o.origem === 'preventiva' || o.tipo === 'Preventiva';

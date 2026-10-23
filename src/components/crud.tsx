@@ -50,6 +50,8 @@ export interface ColumnDef {
   value?: (row: AnyRec, l: Lookups) => string | number | undefined;
   className?: string;
   noExport?: boolean;
+  /** Só na exportação (CSV/Excel): não aparece na tabela. */
+  exportOnly?: boolean;
 }
 
 export interface FilterDef {
@@ -351,6 +353,7 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
   const pageRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const exportCols = cfg.columns.filter((c) => !c.noExport);
+  const tableCols = cfg.columns.filter((c) => !c.exportOnly);
 
   const doExport = async (kind: 'csv' | 'xlsx') => {
     const headers = exportCols.map((c) => c.label);
@@ -452,7 +455,7 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
-                  {cfg.columns.map((c) => (
+                  {tableCols.map((c) => (
                     <th
                       key={c.key}
                       className={cx('cursor-pointer select-none whitespace-nowrap px-3 py-2.5 font-semibold', c.className)}
@@ -464,18 +467,19 @@ export function EntityPage({ cfg }: { cfg: EntityConfig }) {
                       </span>
                     </th>
                   ))}
-                  <th className="px-3 py-2.5 text-right">Ações</th>
+                  <th className="bg-slate-50 px-3 py-2.5 text-right dark:bg-[#182234] md:sticky md:right-0 md:shadow-[inset_1px_0_0_#f1f5f9] dark:md:shadow-[inset_1px_0_0_#1e293b]">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {pageRows.map((r) => (
-                  <tr key={r.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => openRow(r)}>
-                    {cfg.columns.map((c) => (
+                  <tr key={r.id} className="group cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => openRow(r)}>
+                    {tableCols.map((c) => (
                       <td key={c.key} className={cx('px-3 py-2.5 align-top text-slate-700 dark:text-slate-200', c.className)}>
                         {c.render ? c.render(r, lookups) : String(cellText(r, c, lookups) || '—')}
                       </td>
                     ))}
-                    <td className="whitespace-nowrap px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    {/* Ações fixas à direita: continuam visíveis quando a tabela rola na horizontal. */}
+                    <td className="whitespace-nowrap bg-white px-3 py-1.5 text-right group-hover:bg-slate-50 dark:bg-slate-900 dark:group-hover:bg-[#151e31] md:sticky md:right-0 md:shadow-[inset_1px_0_0_#f1f5f9] dark:md:shadow-[inset_1px_0_0_#1e293b]" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center">
                         {cfg.rowActions?.(r, lookups)}
                         {!leitura && (

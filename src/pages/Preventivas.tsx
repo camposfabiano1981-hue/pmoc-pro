@@ -10,13 +10,12 @@ import { useLookups } from '../lib/lookups';
 import { assinaturaUsuario, useSessao } from '../lib/sessao';
 import { OS_FINALIZADAS, statusOs } from '../lib/catalogs';
 import { addDays, fmtDate, fmtDateTime, fmtHoras, todayStr } from '../lib/format';
-import { contagemTarefas, isAtrasada, liberarOS, reprogramarOS, tempoPrevisto } from '../lib/osHelpers';
+import { contagemTarefas, ehPreventiva, isAtrasada, liberarOS, reprogramarOS, tempoPrevisto } from '../lib/osHelpers';
 import { gerarPreventivas, programarRotinas } from '../lib/preventivas';
 import { MARCAS } from '../lib/marcas';
 
 type Etapa = 'programar' | 'programadas' | 'execucao' | 'liberacao' | 'liberadas';
 const EM_EXECUCAO = ['em_execucao', 'pausada', 'aguardando_peca'];
-const ehPreventiva = (o: OS) => o.origem === 'preventiva' || o.tipo === 'Preventiva';
 const GUIA_KEY = 'pmoc-guia-preventivas';
 
 interface Pendente {

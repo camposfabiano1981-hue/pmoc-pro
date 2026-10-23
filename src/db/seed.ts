@@ -2,13 +2,14 @@ import { ALL_TABLES, db, EMPRESA_PADRAO, getSetting, nextNumber, nowIso, setSett
 import { PLANOS_PADRAO, planoSugerido } from './planosPadrao';
 import type {
   AnaliseAr, Ambiente, Cliente, Contrato, Equipamento, Fornecedor, Ocorrencia, Orcamento, OS, Peca, Pmoc,
-  Profissional, RegistroFluido, Servico, Unidade,
+  Profissional, RegistroFluido, Servico, Unidade, CargoPreco, EstudoPreco, Oportunidade,
 } from './types';
 import { addDays, dateStr, localDateTimeStr, todayStr } from '../lib/format';
 import { gerarPreventivas } from '../lib/preventivas';
 import { aplicarPlano, migrarRotinas, registrarExecucoesDaOS } from '../lib/rotinas';
 import { RECOMENDACOES_PADRAO } from '../lib/catalogs';
 import { CONTRATO_PADRAO } from '../lib/contrato';
+import { PARAMETROS_PADRAO, faixaBtu } from '../lib/precificacao';
 
 const stamp = () => {
   const ts = nowIso();
@@ -440,6 +441,91 @@ async function seedDados(): Promise<void> {
     { id: uid(), ...stamp(), equipamentoId: equipDC.id, data: addDays(hoje, -90), operacao: 'estanqueidade', fluido: 'R-410A', quantidadeKg: 0, profissionalId: tec1.id, observacoes: 'Teste com nitrogênio 450 psig — sem vazamentos' },
   ];
   await db.fluidos.bulkAdd(fl);
+
+  // ---------- Comercial e precificação ----------
+  await setSetting('precificacao', {
+    ...PARAMETROS_PADRAO,
+    regime: 'simples',
+    rbt12: 1250000,
+    materiaisPadraoMes: 6,
+    custoKmPadrao: 1.1,
+    custosPadrao: [
+      { descricao: 'Veículo de atendimento (depreciação, seguro, IPVA, manutenção)', valorMensal: 1800 },
+      { descricao: 'Ferramentas e instrumentos (depreciação e calibração)', valorMensal: 350 },
+      { descricao: 'Celular, internet e software de gestão', valorMensal: 180 },
+      { descricao: 'Responsável técnico (horas de engenharia) e ART', valorMensal: 1200 },
+    ],
+  });
+  const cctExemplo = 'Valores de exemplo — substitua pelos da sua convenção coletiva';
+  const cargos: CargoPreco[] = [
+    { id: uid(), ...stamp(), nome: 'Técnico em refrigeração e climatização', cct: cctExemplo, salarioBase: 2900, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 70, examesTreinamentoMes: 30, ativo: true },
+    { id: uid(), ...stamp(), nome: 'Ajudante / auxiliar de refrigeração', cct: cctExemplo, salarioBase: 1950, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 60, examesTreinamentoMes: 30, ativo: true },
+    { id: uid(), ...stamp(), nome: 'Eletricista de manutenção', cct: cctExemplo, salarioBase: 2600, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 60, examesTreinamentoMes: 30, ativo: true },
+  ];
+  await db.cargosPreco.bulkAdd(cargos);
+
+  const sessao = (dias: number, hora: string) => `${addDays(hoje, dias)}T${hora}`;
+  const opIndustria: Oportunidade = {
+    id: uid(), ...stamp(), numero: await nextNumber('op'), tipo: 'privado', etapa: 'proposta', clienteId: cliente.id,
+    titulo: 'Indústria Modelo — renovação do contrato de manutenção e PMOC', objeto: 'Manutenção preventiva e corretiva dos sistemas de climatização das unidades Escritório Central e Planta Industrial, com execução do PMOC.',
+    modalidade: 'Proposta direta', criterio: 'Menor preço global', cidade: 'Corumbá', uf: 'MS', dataSessao: sessao(2, '14:00'), valorEstimado: 86400, vigenciaMeses: 12, responsavelId: rt.id,
+  };
+  const ops: Oportunidade[] = [
+    opIndustria,
+    {
+      id: uid(), ...stamp(), numero: await nextNumber('op'), tipo: 'licitacao', etapa: 'proposta', orgao: 'Prefeitura Municipal (exemplo)',
+      titulo: 'Manutenção preventiva e corretiva de 86 aparelhos split — Secretaria de Educação', objeto: 'Prestação de serviços de manutenção preventiva e corretiva, com PMOC, em 86 aparelhos split de 9.000 a 60.000 BTU/h.',
+      modalidade: 'Pregão eletrônico', criterio: 'Menor preço global', numeroEdital: '90012/2026', processo: '1458/2026', portal: 'Portal de Compras Públicas', linkEdital: 'https://pncp.gov.br/app/editais',
+      cidade: 'Corumbá', uf: 'MS', prazoPropostas: sessao(5, '08:00'), dataSessao: sessao(5, '09:00'), valorEstimado: 248000, vigenciaMeses: 12, responsavelId: rt.id,
+    },
+    {
+      id: uid(), ...stamp(), numero: await nextNumber('op'), tipo: 'licitacao', etapa: 'analise', orgao: 'Tribunal de Justiça — Comarca (exemplo)',
+      titulo: 'Climatização do Fórum — PMOC, manutenção e responsabilidade técnica', modalidade: 'Pregão eletrônico', criterio: 'Menor preço por lote', numeroEdital: '90031/2026', portal: 'Compras.gov.br',
+      cidade: 'Campo Grande', uf: 'MS', dataSessao: sessao(12, '10:00'), valorEstimado: 412000, vigenciaMeses: 12,
+    },
+    {
+      id: uid(), ...stamp(), numero: await nextNumber('op'), tipo: 'privado', etapa: 'ganha', clienteId: cliente2.id,
+      titulo: 'Clínica Bem Estar — manutenção mensal e higienização (RE 09/2003)', modalidade: 'Proposta direta', criterio: 'Menor preço global', cidade: 'Corumbá', uf: 'MS',
+      dataSessao: sessao(-10, '15:00'), valorEstimado: 60000, valorProposta: 54000, vigenciaMeses: 12, vencedor: 'Clima Forte (nossa proposta)', valorVencedor: 54000,
+    },
+    {
+      id: uid(), ...stamp(), numero: await nextNumber('op'), tipo: 'licitacao', etapa: 'perdida', orgao: 'Escola Estadual (exemplo)',
+      titulo: 'Escola Estadual — manutenção de 40 splits', modalidade: 'Dispensa eletrônica', criterio: 'Menor preço global', numeroEdital: '90004/2026', portal: 'Compras.gov.br', cidade: 'Ladário', uf: 'MS',
+      dataSessao: sessao(-25, '09:00'), valorEstimado: 96000, valorProposta: 91500, vigenciaMeses: 12, vencedor: 'Concorrente X (exemplo)', valorVencedor: 84000,
+      motivoResultado: 'Preço: concorrente 8% abaixo. Revisar deslocamento e reserva de corretiva para equipamentos pequenos.',
+    },
+  ];
+  await db.oportunidades.bulkAdd(ops);
+
+  const doCliente = equipamentos.filter((x) => x.unidadeId === sede.id || x.unidadeId === planta.id);
+  const grupos = new Map<string, { tipo: string; faixa?: ReturnType<typeof faixaBtu>; plano?: string; qtd: number }>();
+  for (const x of doCliente) {
+    const f = faixaBtu(x.capacidadeBtu);
+    const k = `${x.tipo}|${f?.id || '-'}`;
+    const g = grupos.get(k) || { tipo: x.tipo, faixa: f, plano: x.planoId, qtd: 0 };
+    g.qtd++;
+    grupos.set(k, g);
+  }
+  const estudo: EstudoPreco = {
+    id: uid(), ...stamp(), numero: await nextNumber('ep'), titulo: opIndustria.titulo, status: 'elaboracao', oportunidadeId: opIndustria.id, clienteId: cliente.id,
+    modelo: 'equipamento', tipoServico: 'engenharia', vigenciaMeses: 12, valorEstimadoMensal: 7200,
+    equipe: [{ cargoId: cargos[0].id, quantidade: 1 }, { cargoId: cargos[1].id, quantidade: 1 }],
+    itens: [...grupos.values()].map((g) => ({
+      id: uid(), descricao: `${g.tipo}${g.faixa ? ` — ${g.faixa.label}` : ''}`, tipoEquip: g.tipo, faixa: g.faixa?.id, planoId: g.plano,
+      fatorTempo: g.faixa?.fator ?? 1, corretivaPct: 10, materiaisMes: 6, quantidade: g.qtd,
+    })),
+    deslocamento: { visitasMes: 6, minutosVisita: 50, kmMes: 480, custoKm: 1.1 },
+    custosFixos: [
+      { id: uid(), descricao: 'Veículo de atendimento (rateio do contrato)', valorMensal: 450 },
+      { id: uid(), descricao: 'Ferramentas e instrumentos (rateio)', valorMensal: 90 },
+      { id: uid(), descricao: 'Responsável técnico e ART (rateio)', valorMensal: 300 },
+    ],
+    rateio: 'horas',
+    bdi: { ...PARAMETROS_PADRAO.bdi },
+    observacoes: 'Exemplo: tempos dos planos de manutenção cadastrados; reserva de 10% para corretivas; peças por orçamento à parte.',
+  };
+  await db.estudos.add(estudo);
+  await db.oportunidades.update(opIndustria.id, { estudoId: estudo.id });
 
   await setSetting('demo', true);
   await markInitialized();

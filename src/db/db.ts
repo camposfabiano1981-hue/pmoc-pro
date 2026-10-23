@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   AnaliseAr, Ambiente, Base, Cliente, Contrato, Empresa, Equipamento, Execucao, Fornecedor, MovEstoque, Ocorrencia,
   Orcamento, OS, Peca, PlanoManutencao, Pmoc, Profissional, RegistroFluido, Rotina, Servico, Setting, Unidade,
+  Oportunidade, EstudoPreco, CargoPreco,
 } from './types';
 
 export class PmocDB extends Dexie {
@@ -24,6 +25,9 @@ export class PmocDB extends Dexie {
   fluidos!: Table<RegistroFluido, string>;
   rotinas!: Table<Rotina, string>;
   execucoes!: Table<Execucao, string>;
+  oportunidades!: Table<Oportunidade, string>;
+  estudos!: Table<EstudoPreco, string>;
+  cargosPreco!: Table<CargoPreco, string>;
   settings!: Table<Setting, string>;
 
   constructor() {
@@ -53,6 +57,12 @@ export class PmocDB extends Dexie {
       rotinas: 'id, equipamentoId, proximaExecucao, planoId',
       execucoes: 'id, rotinaId, equipamentoId, osId, data',
     });
+    // v3: módulo comercial (oportunidades/licitações) e precificação
+    this.version(3).stores({
+      oportunidades: 'id, numero, etapa, dataSessao, clienteId',
+      estudos: 'id, numero, status, oportunidadeId, clienteId',
+      cargosPreco: 'id, nome',
+    });
   }
 }
 
@@ -68,6 +78,7 @@ export type TableName = Exclude<
 export const ALL_TABLES: TableName[] = [
   'clientes', 'unidades', 'ambientes', 'equipamentos', 'planos', 'profissionais', 'pecas', 'movimentos',
   'servicos', 'fornecedores', 'contratos', 'pmocs', 'os', 'ocorrencias', 'orcamentos', 'analisesAr', 'fluidos', 'rotinas', 'execucoes',
+  'oportunidades', 'estudos', 'cargosPreco',
 ];
 
 export function uid(): string {
@@ -113,13 +124,15 @@ const PREFIXES: Record<string, string> = {
   peca: 'P',
   serv: 'S',
   ct: 'CT',
+  op: 'OP',
+  ep: 'EP',
 };
 
 /** Gera numeração sequencial (ex.: OS-2026-00012). Anual para OS/OC/ORC. */
 export async function nextNumber(kind: keyof typeof PREFIXES | string): Promise<string> {
   return db.transaction('rw', db.settings, async () => {
     const counters = await getSetting<Record<string, number>>('counters', {});
-    const yearly = ['os', 'oc', 'orc', 'pmoc', 'ct'].includes(kind);
+    const yearly = ['os', 'oc', 'orc', 'pmoc', 'ct', 'op', 'ep'].includes(kind);
     const year = new Date().getFullYear();
     const key = yearly ? `${kind}-${year}` : kind;
     const n = (counters[key] || 0) + 1;
