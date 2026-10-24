@@ -3,7 +3,7 @@ import { db, getSetting, nextNumber, nowIso, setSetting, uid } from '../db/db';
 import type { CargoPreco, Contrato, EstudoPreco, Oportunidade, ParametrosPreco } from '../db/types';
 import { CONTRATO_PADRAO } from './contrato';
 import { addDays, todayStr } from './format';
-import { comPadroes } from './precificacao';
+import { comPadroes, custoKmSugerido } from './precificacao';
 
 export const PARAMS_KEY = 'precificacao';
 
@@ -21,9 +21,9 @@ export function useParametrosPreco(): ParametrosPreco | undefined {
 }
 
 export const CARGOS_SUGERIDOS: Omit<CargoPreco, 'id' | 'createdAt' | 'updatedAt'>[] = [
-  { nome: 'Técnico em refrigeração e climatização', salarioBase: 0, periculosidade: true, diasMes: 22, ativo: true },
-  { nome: 'Ajudante / auxiliar de refrigeração', salarioBase: 0, periculosidade: true, diasMes: 22, ativo: true },
-  { nome: 'Eletricista de manutenção', salarioBase: 0, periculosidade: true, diasMes: 22, ativo: true },
+  { nome: 'Técnico em refrigeração e climatização', vinculo: 'clt', salarioBase: 0, periculosidade: true, diasMes: 22, insumosModo: 'composicao', ativo: true },
+  { nome: 'Ajudante / auxiliar de refrigeração', vinculo: 'clt', salarioBase: 0, periculosidade: true, diasMes: 22, insumosModo: 'composicao', ativo: true },
+  { nome: 'Eletricista de manutenção', vinculo: 'clt', salarioBase: 0, periculosidade: true, diasMes: 22, insumosModo: 'composicao', ativo: true },
 ];
 
 export async function criarCargosSugeridos(): Promise<void> {
@@ -31,12 +31,14 @@ export async function criarCargosSugeridos(): Promise<void> {
   await db.cargosPreco.bulkAdd(CARGOS_SUGERIDOS.map((c) => ({ ...c, id: uid(), createdAt: ts, updatedAt: ts })));
 }
 
-/** Novo estudo com equipe (técnico + ajudante, se cadastrados), BDI e custos operacionais padrão. */
+/** Novo estudo com equipe (técnico + ajudante, se cadastrados), método de preço, BDI e custos da composição. */
 export async function criarEstudo(partial: Partial<EstudoPreco> = {}): Promise<EstudoPreco> {
   const p = await carregarParametros();
   const cargos = (await db.cargosPreco.toArray()).filter((c) => c.ativo);
-  const tecnico = cargos.find((c) => /t[eé]cnico/i.test(c.nome));
-  const ajudante = cargos.find((c) => /ajudante|auxiliar/i.test(c.nome));
+  const clt = (c: CargoPreco) => (c.vinculo || 'clt') === 'clt';
+  const achar = (re: RegExp) => cargos.find((c) => re.test(c.nome) && clt(c)) || cargos.find((c) => re.test(c.nome));
+  const tecnico = achar(/t[eé]cnico/i);
+  const ajudante = achar(/ajudante|auxiliar/i);
   const equipe = [tecnico, ajudante].filter((c): c is CargoPreco => !!c).map((c) => ({ cargoId: c.id, quantidade: 1 }));
   const ts = nowIso();
   const e: EstudoPreco = {
@@ -51,10 +53,17 @@ export async function criarEstudo(partial: Partial<EstudoPreco> = {}): Promise<E
     vigenciaMeses: 12,
     equipe: equipe.length ? equipe : cargos.slice(0, 1).map((c) => ({ cargoId: c.id, quantidade: 1 })),
     itens: [],
-    deslocamento: { visitasMes: 0, minutosVisita: 0, kmMes: 0, custoKm: p.custoKmPadrao },
+    deslocamento: { visitasMes: 0, minutosVisita: 0, kmMes: 0, custoKm: custoKmSugerido(p) },
     custosFixos: p.custosPadrao.map((c) => ({ id: uid(), descricao: c.descricao, valorMensal: c.valorMensal })),
     rateio: 'horas',
+    kits: 1,
+    veiculos: 1,
+    metodo: p.metodo,
+    referenciaTcu: p.referenciaTcu,
     bdi: { ...p.bdi },
+    markup: { ...p.markup },
+    bdiMateriais: { ...p.bdiMateriais },
+    validadeDias: 60,
     ...partial,
   };
   await db.estudos.add(e);

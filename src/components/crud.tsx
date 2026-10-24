@@ -24,6 +24,8 @@ export interface FieldCtx {
 export interface FieldDef {
   name: string;
   label: string;
+  /** Rótulo que depende do formulário (ex.: salário, pró-labore ou valor do RPA) */
+  labelDe?: (form: AnyRec) => string;
   type: 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'ref' | 'checkbox' | 'email' | 'tel' | 'color' | 'doc' | 'custom';
   required?: boolean;
   options?: (string | { value: string; label: string })[];
@@ -201,7 +203,7 @@ export function EntityFormFields({ fields, form, setForm, lookups }: { fields: F
             {s.fields.map((f) => (
               <Field
                 key={f.name}
-                label={f.label}
+                label={f.labelDe?.(form) ?? f.label}
                 required={f.required}
                 className={cx('col-span-1', SPAN[f.span || 2])}
                 help={typeof f.help === 'function' ? f.help(form, lookups) : f.help}
@@ -230,7 +232,7 @@ export function EntityFormModal({ cfg, initial, open, onClose, onSaved }: { cfg:
   const save = async () => {
     for (const f of cfg.fields) {
       if (f.required && !f.hidden?.(form) && (form[f.name] === undefined || form[f.name] === '' || form[f.name] === null)) {
-        toast(`Preencha o campo "${f.label}".`, 'warning');
+        toast(`Preencha o campo "${f.labelDe?.(form) ?? f.label}".`, 'warning');
         return;
       }
     }

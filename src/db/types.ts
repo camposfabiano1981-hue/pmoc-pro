@@ -614,10 +614,17 @@ export interface Oportunidade extends Base {
 }
 
 /* ===================== Precificação ===================== */
+export type RegimeTributario = 'mei' | 'simples' | 'presumido' | 'real';
+/** Empregado CLT, sócio/titular (pró-labore) ou autônomo pago por RPA. */
+export type VinculoCargo = 'clt' | 'socio' | 'autonomo';
+
 /** Cargo da equipe com remuneração e benefícios da convenção coletiva (base do custo-hora). */
 export interface CargoPreco extends Base {
   nome: string;
+  /** Ausente = empregado CLT */
+  vinculo?: VinculoCargo;
   cct?: string;
+  /** Salário-base (CLT), pró-labore (sócio/titular) ou valor mensal pago (autônomo) */
   salarioBase: number;
   periculosidade?: boolean;
   /** Grau de insalubridade sobre o salário mínimo (%) */
@@ -631,8 +638,111 @@ export interface CargoPreco extends Base {
   outrosBeneficios?: number;
   uniformeEpiMes?: number;
   examesTreinamentoMes?: number;
+  /** Insumos de pessoal pela composição de custos ou pelos valores manuais (ausente: manual se houver valores) */
+  insumosModo?: 'composicao' | 'manual';
   ativo: boolean;
   observacoes?: string;
+}
+
+/** Ferramenta ou instrumento do kit da equipe: custo mensal = depreciação + manutenção/calibração. */
+export interface ItemFerramenta {
+  id: string;
+  descricao: string;
+  quantidade: number;
+  valorUnit: number;
+  vidaUtilMeses: number;
+  /** Valor residual ao fim da vida útil (%) */
+  residualPct?: number;
+  /** Manutenção e calibração da linha por ano (R$) */
+  manutencaoAnual?: number;
+}
+
+export type CategoriaPessoal = 'uniforme' | 'epi' | 'exame' | 'treinamento';
+
+/** Item fornecido a cada empregado: uniforme, EPI (NR-6), exame (PCMSO/NR-7) ou treinamento (NR-10, NR-35…). */
+export interface ItemPessoal {
+  id: string;
+  categoria: CategoriaPessoal;
+  descricao: string;
+  /** Quantidade por empregado por ano (0,5 = a cada dois anos) */
+  qtdAno: number;
+  valorUnit: number;
+  /** Cargos a que se aplica (vazio = todos) */
+  cargos?: ID[];
+  /** CA do EPI, norma ou observação */
+  ref?: string;
+}
+
+/** Material de consumo por equipamento atendido. */
+export interface ItemInsumo {
+  id: string;
+  descricao: string;
+  unidade: string;
+  /** Consumo médio por equipamento por mês */
+  consumoMes: number;
+  valorUnit: number;
+}
+
+/** Veículo de atendimento: custos fixos (mensais) e variáveis (por km). */
+export interface VeiculoComposicao {
+  descricao: string;
+  valorAquisicao: number;
+  vidaUtilAnos: number;
+  residualPct: number;
+  /** IPVA, licenciamento e taxas por ano */
+  ipvaAnual: number;
+  seguroAnual: number;
+  /** Rastreador, estacionamento e outros custos fixos por mês */
+  outrosMensal: number;
+  /** Remuneração do capital investido (% ao ano sobre o capital médio) */
+  capitalPctAno: number;
+  precoCombustivel: number;
+  consumoKmL: number;
+  /** Manutenção, óleo e lavagem (R$/km) */
+  manutencaoKm: number;
+  pneusKm: number;
+}
+
+export interface LinhaCusto {
+  id?: string;
+  descricao: string;
+  valorMensal: number;
+}
+
+/** Tabelas de composição dos custos operacionais e administrativos. */
+export interface ComposicaoCustos {
+  ferramentas: ItemFerramenta[];
+  pessoal: ItemPessoal[];
+  insumos: ItemInsumo[];
+  veiculo: VeiculoComposicao;
+  /** Despesas fixas da empresa (administração central) */
+  administrativas: LinhaCusto[];
+}
+
+export type MetodoPreco = 'tcu' | 'markup';
+export type ReferenciaTcu = 'edificacoes' | 'energia';
+
+/** Markup divisor (mercado privado): preço = custo ÷ [1 − (tributos + despesas fixas + despesas variáveis + lucro)]. */
+export interface MarkupParams {
+  /** Despesas fixas em % do faturamento (ausente = calculado pela composição) */
+  despesasFixasPct?: number;
+  comissaoPct: number;
+  /** Taxas de cartão, boleto e antecipação */
+  cartaoPct: number;
+  inadimplenciaPct: number;
+  lucroPct: number;
+}
+
+/** BDI diferenciado para materiais (Súmula TCU 253) ou margem própria no markup. */
+export interface BdiMateriais {
+  ativo: boolean;
+  ac: number;
+  s: number;
+  r: number;
+  g: number;
+  l: number;
+  /** Margem sobre materiais no método de markup (%) */
+  lucroMarkup: number;
 }
 
 export interface BdiParams {
@@ -688,7 +798,19 @@ export interface EstudoPreco extends Base {
   deslocamento: { visitasMes: number; minutosVisita: number; kmMes: number; custoKm: number };
   custosFixos: CustoFixoEstudo[];
   rateio: 'horas' | 'equipamentos';
+  /** Kits de ferramentas e veículos da composição de custos alocados pelas horas (ausente = 0) */
+  kits?: number;
+  veiculos?: number;
+  /** Método de formação do preço (ausente = BDI do TCU) */
+  metodo?: MetodoPreco;
+  referenciaTcu?: ReferenciaTcu;
   bdi: BdiParams;
+  markup?: MarkupParams;
+  bdiMateriais?: BdiMateriais;
+  /** Responsável técnico pela composição */
+  responsavelId?: ID;
+  /** Validade da proposta (dias) */
+  validadeDias?: number;
   /** ISS do município de execução (substitui o dos parâmetros) */
   issAliquota?: number;
   /** Memória da carga tributária na data da proposta (base para reequilíbrio — LC 214/2025, arts. 373 a 377) */
@@ -698,7 +820,15 @@ export interface EstudoPreco extends Base {
 
 /** Parâmetros gerais de precificação (regime tributário, encargos, provisões, horas e BDI padrão). */
 export interface ParametrosPreco {
-  regime: 'simples' | 'presumido' | 'real';
+  regime: RegimeTributario;
+  /** DAS mensal do MEI (ausente = 5% do salário mínimo + R$ 5,00 de ISS) */
+  meiDas?: number;
+  /** Limite anual de faturamento do MEI */
+  meiLimite: number;
+  /** INSS patronal sobre autônomos (ausente = padrão do regime) */
+  inssAutonomo?: number;
+  /** Faturamento mensal médio da empresa (base das despesas fixas em % do preço) */
+  faturamentoMensal: number;
   /** Receita bruta dos últimos 12 meses (Simples Nacional) */
   rbt12: number;
   /** Excluir as parcelas de IRPJ e CSLL do DAS na taxa de tributos do BDI */
@@ -727,8 +857,15 @@ export interface ParametrosPreco {
   feriasDiasUteis: number;
   ausenciasDias: number;
   produtividade: number;
+  metodo: MetodoPreco;
+  referenciaTcu: ReferenciaTcu;
   bdi: BdiParams;
+  markup: MarkupParams;
+  bdiMateriais: BdiMateriais;
+  composicao: ComposicaoCustos;
+  /** Outros custos mensais de cada contrato (responsável técnico, ART, seguro-garantia…) */
   custosPadrao: { descricao: string; valorMensal: number }[];
+  /** Legado: materiais e custo/km informados direto (substituídos pela composição) */
   materiaisPadraoMes: number;
   custoKmPadrao: number;
 }

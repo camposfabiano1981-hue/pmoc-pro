@@ -443,25 +443,47 @@ async function seedDados(): Promise<void> {
   await db.fluidos.bulkAdd(fl);
 
   // ---------- Comercial e precificação ----------
+  // Valores de exemplo para a demonstração — cada empresa deve informar os seus.
+  const precoFer: Record<string, [number, number?]> = {
+    'f-vacuo': [1900, 150], 'f-manifold': [1650, 200], 'f-balanca': [650, 120], 'f-recolhedora': [3800, 250], 'f-detector': [1300, 120],
+    'f-vacuometro': [520, 0], 'f-lavadora': [900, 0], 'f-alicate': [450, 150], 'f-medicao': [600, 150], 'f-tubos': [550, 0],
+    'f-furadeira': [800, 0], 'f-escada': [900, 0], 'f-nitrogenio': [1200, 0], 'f-manuais': [700, 0], 'f-limpeza': [250, 0],
+  };
+  const precoPessoal: Record<string, number> = {
+    'p-camisa': 55, 'p-calca': 85, 'p-botina': 160, 'p-oculos': 15, 'p-luvas': 12, 'p-auricular': 3, 'p-pff2': 6, 'p-capacete': 70, 'p-cinto': 420,
+    'p-aso': 180, 'p-admissao': 150, 'p-nr35': 250, 'p-nr10': 450,
+  };
+  const precoInsumo: Record<string, number> = { 'i-limpa': 38, 'i-bactericida': 60, 'i-dreno': 3, 'i-panos': 1.5, 'i-fitas': 2, 'i-fluido': 120 };
+  const despesas: Record<string, number> = {
+    'Aluguel, condomínio e IPTU do escritório/oficina': 2200, 'Energia, água e internet': 650, Telefonia: 300, Contabilidade: 950,
+    'Software de gestão e sistemas': 250, 'Salários e encargos do pessoal administrativo': 3600, 'Marketing, site e anúncios': 400,
+    'Anuidades (CREA/CFT), alvarás e licenças': 180, 'Seguro empresarial e de responsabilidade civil': 250, 'Tarifas bancárias': 150, 'Material de escritório e limpeza': 150,
+  };
+  const cctExemplo = 'Valores de exemplo — substitua pelos da sua convenção coletiva';
+  const cargos: CargoPreco[] = [
+    { id: uid(), ...stamp(), nome: 'Técnico em refrigeração e climatização', vinculo: 'clt', cct: cctExemplo, salarioBase: 2900, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, insumosModo: 'composicao', ativo: true },
+    { id: uid(), ...stamp(), nome: 'Ajudante / auxiliar de refrigeração', vinculo: 'clt', cct: cctExemplo, salarioBase: 1950, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, insumosModo: 'composicao', ativo: true },
+    { id: uid(), ...stamp(), nome: 'Eletricista de manutenção', vinculo: 'clt', cct: cctExemplo, salarioBase: 2600, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, insumosModo: 'composicao', ativo: true },
+    { id: uid(), ...stamp(), nome: 'Ajudante diarista (autônomo)', vinculo: 'autonomo', salarioBase: 1800, valeAlimentacaoDia: 25, diasMes: 20, insumosModo: 'composicao', ativo: true, observacoes: 'Exemplo de prestador pago por RPA para picos de demanda.' },
+  ];
+  const eletricista = cargos[2].id;
   await setSetting('precificacao', {
     ...PARAMETROS_PADRAO,
     regime: 'simples',
     rbt12: 1250000,
-    materiaisPadraoMes: 6,
-    custoKmPadrao: 1.1,
-    custosPadrao: [
-      { descricao: 'Veículo de atendimento (depreciação, seguro, IPVA, manutenção)', valorMensal: 1800 },
-      { descricao: 'Ferramentas e instrumentos (depreciação e calibração)', valorMensal: 350 },
-      { descricao: 'Celular, internet e software de gestão', valorMensal: 180 },
-      { descricao: 'Responsável técnico (horas de engenharia) e ART', valorMensal: 1200 },
-    ],
+    faturamentoMensal: 104000,
+    composicao: {
+      ferramentas: PARAMETROS_PADRAO.composicao.ferramentas.map((x) => ({ ...x, valorUnit: precoFer[x.id]?.[0] ?? 0, manutencaoAnual: precoFer[x.id]?.[1] ?? 0 })),
+      pessoal: [
+        ...PARAMETROS_PADRAO.composicao.pessoal.map((x) => ({ ...x, valorUnit: precoPessoal[x.id] ?? 0, cargos: x.id === 'p-nr10' ? [cargos[0].id, eletricista] : undefined })),
+        { id: 'p-fr', categoria: 'epi' as const, descricao: 'Vestimenta antichama (risco 2) e luva isolante classe 00', qtdAno: 1, valorUnit: 560, ref: 'NR-10', cargos: [eletricista] },
+      ],
+      insumos: PARAMETROS_PADRAO.composicao.insumos.map((x) => ({ ...x, valorUnit: precoInsumo[x.id] ?? 0 })),
+      veiculo: { ...PARAMETROS_PADRAO.composicao.veiculo, descricao: 'Utilitário compacto (furgão/picape)', valorAquisicao: 95000, vidaUtilAnos: 5, residualPct: 40, ipvaAnual: 3000, seguroAnual: 3600, outrosMensal: 150, capitalPctAno: 0, precoCombustivel: 6.3, consumoKmL: 11, manutencaoKm: 0.25, pneusKm: 0.08 },
+      administrativas: PARAMETROS_PADRAO.composicao.administrativas.map((x) => ({ ...x, valorMensal: despesas[x.descricao] ?? 0 })),
+    },
+    custosPadrao: [{ descricao: 'Responsável técnico (horas de engenharia) e ART/TRT', valorMensal: 1200 }],
   });
-  const cctExemplo = 'Valores de exemplo — substitua pelos da sua convenção coletiva';
-  const cargos: CargoPreco[] = [
-    { id: uid(), ...stamp(), nome: 'Técnico em refrigeração e climatização', cct: cctExemplo, salarioBase: 2900, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 70, examesTreinamentoMes: 30, ativo: true },
-    { id: uid(), ...stamp(), nome: 'Ajudante / auxiliar de refrigeração', cct: cctExemplo, salarioBase: 1950, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 60, examesTreinamentoMes: 30, ativo: true },
-    { id: uid(), ...stamp(), nome: 'Eletricista de manutenção', cct: cctExemplo, salarioBase: 2600, periculosidade: true, insalubridade: 0, valeTransporteDia: 9.6, valeAlimentacaoDia: 28, diasMes: 22, seguroVida: 12, uniformeEpiMes: 60, examesTreinamentoMes: 30, ativo: true },
-  ];
   await db.cargosPreco.bulkAdd(cargos);
 
   const sessao = (dias: number, hora: string) => `${addDays(hoje, dias)}T${hora}`;
@@ -512,17 +534,21 @@ async function seedDados(): Promise<void> {
     equipe: [{ cargoId: cargos[0].id, quantidade: 1 }, { cargoId: cargos[1].id, quantidade: 1 }],
     itens: [...grupos.values()].map((g) => ({
       id: uid(), descricao: `${g.tipo}${g.faixa ? ` — ${g.faixa.label}` : ''}`, tipoEquip: g.tipo, faixa: g.faixa?.id, planoId: g.plano,
-      fatorTempo: g.faixa?.fator ?? 1, corretivaPct: 10, materiaisMes: 6, quantidade: g.qtd,
+      fatorTempo: g.faixa?.fator ?? 1, corretivaPct: 10, materiaisMes: Math.round(14.64 * (g.faixa?.fator ?? 1) * 100) / 100, quantidade: g.qtd,
     })),
-    deslocamento: { visitasMes: 6, minutosVisita: 50, kmMes: 480, custoKm: 1.1 },
-    custosFixos: [
-      { id: uid(), descricao: 'Veículo de atendimento (rateio do contrato)', valorMensal: 450 },
-      { id: uid(), descricao: 'Ferramentas e instrumentos (rateio)', valorMensal: 90 },
-      { id: uid(), descricao: 'Responsável técnico e ART (rateio)', valorMensal: 300 },
-    ],
+    deslocamento: { visitasMes: 6, minutosVisita: 50, kmMes: 480, custoKm: 0.9 },
+    custosFixos: [{ id: uid(), descricao: 'Responsável técnico e ART (rateio do contrato)', valorMensal: 300 }],
     rateio: 'horas',
+    kits: 1,
+    veiculos: 1,
+    metodo: 'tcu',
+    referenciaTcu: 'edificacoes',
     bdi: { ...PARAMETROS_PADRAO.bdi },
-    observacoes: 'Exemplo: tempos dos planos de manutenção cadastrados; reserva de 10% para corretivas; peças por orçamento à parte.',
+    markup: { ...PARAMETROS_PADRAO.markup },
+    bdiMateriais: { ...PARAMETROS_PADRAO.bdiMateriais },
+    responsavelId: rt.id,
+    validadeDias: 60,
+    observacoes: 'Tempos dos planos de manutenção do PMOC; reserva de 10% das horas para corretivas; materiais de consumo inclusos; peças e componentes de reposição por orçamento à parte; atendimento em horário comercial.',
   };
   await db.estudos.add(estudo);
   await db.oportunidades.update(opIndustria.id, { estudoId: estudo.id });

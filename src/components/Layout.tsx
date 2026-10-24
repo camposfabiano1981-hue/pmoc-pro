@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertOctagon, BarChart3, Boxes, Building2, CalendarDays, ClipboardCheck, ClipboardList, Factory, FileSignature, FileText, HardHat, LayoutDashboard,
   ListChecks, MapPin, Menu, Moon, Package, Receipt, Search, Settings, Snowflake, Sun, Truck, Users, Wind, Wrench, X, CalendarRange, UserCircle2, CalendarCheck2,
-  Briefcase, Calculator, ChevronDown, ChevronRight, Percent, Target, TrendingUp, UsersRound,
+  Briefcase, Calculator, ChevronDown, ChevronRight, Layers, Percent, Target, TrendingUp, UsersRound,
 } from 'lucide-react';
 import { addDays, todayStr } from '../lib/format';
 import { ehPreventiva, isAtrasada } from '../lib/osHelpers';
@@ -91,8 +91,8 @@ export const NAV: NavModulo[] = [
     items: [
       { to: '/precificacao', label: 'Estudos de preço', icon: <Calculator size={17} /> },
       { to: '/precificacao/equipe', label: 'Equipe e custo-hora', icon: <UsersRound size={17} /> },
-      { to: '/precificacao/tributos', label: 'Tributos, encargos e BDI', icon: <Percent size={17} /> },
-      { to: '/precificacao/custos', label: 'Custos operacionais', icon: <Truck size={17} /> },
+      { to: '/precificacao/custos', label: 'Composição de custos', icon: <Layers size={17} /> },
+      { to: '/precificacao/tributos', label: 'Tributos e formação do preço', icon: <Percent size={17} /> },
     ],
   },
   {

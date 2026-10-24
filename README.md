@@ -27,7 +27,7 @@ gratuitamente pelo **GitHub Pages**, sem servidor nem banco de dados para contra
 | **Cronograma por equipamento** | **Previsão diária** (dias 1–31, como o cronograma de manutenção periódica) e **visão anual**, rotina a rotina, na legenda de cores do PMOC; clique em um dia para reprogramar (a rotina ou a OS já gerada). **Geração automática das OS preventivas** (uma por equipamento, por ambiente ou por unidade), sem duplicar rotinas já programadas |
 | **Contratos** | **Contrato padrão de prestação de serviços** de manutenção de climatização (PMOC), montado com os dados do cadastro: quadro-resumo, objeto, execução, PMOC e responsabilidade técnica, obrigações das partes, peças e fluido, preço com **valor por extenso**, reajuste, vigência, garantia, penalidades por SLA, rescisão, LGPD, foro e assinaturas com testemunhas, além dos **Anexos I** (locais e equipamentos), **II** (plano de manutenção) e **III** (níveis de serviço). Dois modelos: **particular** (Código Civil) e **Administração Pública** (Lei 14.133/2021: dotação, gestor e fiscal, garantia contratual, sanções, apostilamento do reajuste, PNCP). Impressão/PDF e download em **Word (.doc)** para ajustes de redação |
 | **Comercial** | **Painel comercial** (sessões dos próximos dias, receita mensal contratada, contratos a vencer em 90 dias, aniversários para reajuste, orçamentos aguardando) e **funil de oportunidades e licitações**: edital, modalidade, critério de julgamento, portal, data da sessão, valor estimado × proposta, resultado e motivo. Da oportunidade saem o **estudo de preço** e, quando ganha, o **contrato** já preenchido |
-| **Precificação** | **Tributos, encargos e BDI** (Simples Nacional Anexo III com alíquota efetiva e repartição dos tributos, Lucro Presumido ou Real, desoneração da folha na transição da Lei 14.973/2024), **custo-hora por cargo** na estrutura de módulos da IN SEGES 5/2017, custos operacionais, **estudo de preço por equipamento** a partir das horas do plano PMOC, **BDI pela fórmula do Acórdão TCU 2622/2013** com as faixas de referência, lance mínimo, alerta de exequibilidade (Lei 14.133/2021, art. 59) e **composição de preços** impressa |
+| **Precificação** | **Composição de custos** em tabelas (kit de ferramentas com depreciação e calibração, EPI, uniformes, exames e treinamentos por cargo, insumos por equipamento, veículo com custo fixo e por km, despesas administrativas), **custo-hora por cargo** (CLT na estrutura da IN SEGES 5/2017, sócio/titular com pró-labore ou autônomo por RPA), regimes **MEI**, Simples Nacional (Anexo III), Lucro Presumido e Real, **formação do preço pelo BDI do TCU** (Acórdão 2622/2013, faixas por tipo de serviço) **ou por markup** (mercado privado), BDI diferenciado de materiais, **estudo de preço por equipamento** a partir das horas do plano PMOC, lance mínimo, preço da hora técnica, alertas de exequibilidade e do limite do MEI, **planilha de composição de preços** impressa e em Excel |
 | **Planos de manutenção** | 8 planos prontos e editáveis: Portaria 3.523 (Anexo I completo), Split/Janela, VRF/VRV, Chiller, Fan Coil/Self/AHU, Torre de resfriamento, Câmara fria/refrigeração comercial, Exaustão. Periodicidades diária a anual, tempo padrão e faixas de medição |
 | **Qualidade do ar** | Laudos da RE 09/2003 (fungos, relação I/E, CO₂, aerodispersóides, temperatura, umidade, velocidade, renovação) com avaliação automática e alerta de vencimento semestral |
 | **Fluidos refrigerantes** | Cargas, recolhimentos, vazamentos e testes de estanqueidade por equipamento, com **tCO₂e** (GWP) |
@@ -98,18 +98,55 @@ Periodicidades em meses (mensal, bimestral, trimestral, quadrimestral, semestral
 
 ## Precificação para licitações e contratos (passo a passo)
 
-1. **Tributos, encargos e BDI.** Informe o regime: Simples Nacional (Anexo III) com a receita bruta dos últimos 12 meses — a alíquota efetiva e a repartição saem da LC 123/2006 —, ou Lucro Presumido/Real com o ISS do município e, se for o caso, a desoneração da folha (CPRB) na transição da Lei 14.973/2024. Ajuste os percentuais do BDI (administração central, seguros, riscos, garantias, lucro e prazo de recebimento) e as provisões trabalhistas. O BDI é recalculado na hora e cada componente mostra um farol em relação às faixas de referência do TCU.
-2. **Equipe e custo-hora.** Cadastre cada cargo com os valores da sua convenção coletiva: salário-base, periculosidade (30%, NR-16) ou insalubridade (sobre o salário mínimo), vale-transporte (com o desconto de 6% do salário), alimentação, plano de saúde, seguro, uniformes/EPI e exames/treinamentos. O demonstrativo segue os módulos da planilha da IN SEGES 5/2017 (remuneração; 13º, férias e 1/3; encargos do Grupo A; benefícios; rescisão; insumos) e divide o custo mensal pelas horas produtivas.
-3. **Custos operacionais.** Veículo, ferramentas, responsável técnico/ART e outros custos mensais, materiais de consumo por equipamento e custo por km. Entram como padrão em todo estudo novo.
-4. **Estudo de preço.** Crie pelo menu ou pela oportunidade (botão da calculadora). Em *Equipamentos*, **Gerar dos equipamentos cadastrados** agrupa os aparelhos do cliente por tipo e faixa de capacidade, com o plano de manutenção de cada grupo. As horas por mês saem das periodicidades e dos tempos do plano PMOC, multiplicadas pelo fator da faixa de BTU, mais a reserva para corretivas. Preço unitário = (mão de obra + materiais + indiretos rateados) × (1 + BDI). O resumo mostra o preço mensal, anual e da vigência, a comparação com o valor estimado do edital e o **lance mínimo** (preço sem o lucro).
-5. **Exequibilidade.** Em serviços de engenharia, o estudo alerta proposta abaixo de 75% do valor orçado pela Administração (Lei 14.133/2021, art. 59, §4º — presunção relativa: a empresa pode demonstrar que o preço é exequível) e calcula a garantia adicional abaixo de 85% (art. 59, §5º). Em serviços comuns, usa a referência de 50% da IN SEGES 73/2022.
-6. **Composição impressa.** *Imprimir composição* gera a memória de cálculo (equipe e custo-hora, composição por equipamento, indiretos, demonstrativo do BDI com a fórmula e valor por extenso) para anexar à proposta ou responder a uma diligência.
+1. **Composição de custos.** Preencha as tabelas com os seus valores:
+   - **Ferramentas e instrumentos** de uma equipe (quantidade, valor, vida útil, residual, manutenção/calibração): o custo mensal do kit vira custo por hora produtiva.
+   - **EPI, uniformes, exames e treinamentos** por empregado (quantidade por ano; 0,5 = a cada dois anos), com a opção de valer só para alguns cargos (ex.: NR-10 para técnico e eletricista).
+   - **Insumos por equipamento/mês** (limpador de serpentina, bactericida, fitas, complemento de fluido…).
+   - **Veículo**: depreciação, IPVA, seguro e outros custos fixos, mais combustível, manutenção e pneus por km.
+   - **Despesas administrativas** e o faturamento médio, que dão o peso das despesas fixas no preço e o AC equivalente do BDI.
+   - **Custos do contrato** (responsável técnico/ART, supervisão, seguro-garantia).
+2. **Equipe e custo-hora.** Cadastre cada cargo com o **vínculo**: empregado CLT (salário da convenção coletiva, periculosidade ou insalubridade, benefícios, encargos, 13º, férias e rescisão, nos módulos da IN SEGES 5/2017), **sócio ou titular** (pró-labore) ou **autônomo** (RPA, sem provisões trabalhistas). Os insumos de pessoal vêm da composição. O custo mensal é dividido pelas horas produtivas.
+3. **Tributos e formação do preço.** Escolha o regime:
+   - **MEI**: DAS fixo de 5% do salário mínimo + R$ 5,00 de ISS, sem tributo sobre o preço, limite de R$ 81.000,00 por ano e um empregado (3% de INSS + 8% de FGTS).
+   - **Simples Nacional** (Anexo III), com a alíquota efetiva pela receita dos últimos 12 meses.
+   - **Lucro Presumido ou Real**, com ISS e desoneração da folha na transição da Lei 14.973/2024.
 
-**Fórmula do BDI (Acórdão TCU 2622/2013):** `BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L) / (1 − I)] − 1`, em que *I* reúne os tributos sobre o faturamento (ISS, PIS, Cofins, CPRB ou, no Simples, a parcela do DAS sem IRPJ e CSLL — Súmula TCU 254).
+   Em seguida, escolha o método:
+   - **BDI do TCU**, para licitações, com faixas por tipo de serviço (edificações ou redes de energia), quartis aplicáveis com um clique e farol de cada componente.
+   - **Markup divisor**, para o mercado privado e o MEI: despesas fixas, comissão, cartão/boleto, inadimplência e lucro em % do preço.
+
+   Os dois aceitam o **BDI diferenciado para materiais** (Súmula TCU 253).
+4. **Estudo de preço.** Crie pelo menu ou pela oportunidade (botão da calculadora). Em *Equipamentos*, **Gerar dos equipamentos cadastrados** agrupa os aparelhos do cliente por tipo e faixa de capacidade, com o plano de manutenção de cada grupo e os materiais da composição × fator de porte. As horas por mês saem das periodicidades e dos tempos do plano PMOC, mais a reserva para corretivas.
+
+   Preço unitário = (mão de obra + ferramentas e veículo + indiretos) × (1 + BDI) + materiais × (1 + BDI dos materiais).
+
+   O resumo mostra:
+   - preço mensal, anual e da vigência;
+   - comparação com o valor estimado;
+   - **lance mínimo** (sem lucro);
+   - **preço da hora técnica**, para serviços eventuais.
+5. **Exequibilidade e alertas.**
+   - Serviços de engenharia: alerta abaixo de 75% do valor orçado pela Administração (Lei 14.133/2021, art. 59, §4º — presunção relativa) e calcula a garantia adicional abaixo de 85% (§5º).
+   - Serviços comuns: referência de 50% (IN SEGES 73/2022).
+   - MEI: avisa quando o contrato passa do limite anual ou quando a equipe tem mais de um empregado.
+6. **Planilha de composição de preços.** *Imprimir composição* gera o documento em A4 paisagem, com:
+   - cabeçalho da empresa e quadro-resumo com os indicadores;
+   - mão de obra e custo-hora operacional;
+   - composição de custos unitários por equipamento;
+   - indiretos, ferramentas e veículo;
+   - demonstrativo do BDI com a fórmula e os valores, ou o markup;
+   - tributos, resumo com valor por extenso e assinaturas do responsável técnico e do representante legal;
+   - anexos de insumos e numeração de páginas.
+
+   A **versão interna** acrescenta lance mínimo, exequibilidade, hora técnica e despesas administrativas. O botão **Excel** baixa a mesma planilha em abas.
+
+**Fórmula do BDI (Acórdão TCU 2622/2013):** `BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L) / (1 − I)] − 1`, em que *I* reúne os tributos sobre o faturamento (ISS, PIS, Cofins, CPRB ou, no Simples, as parcelas do DAS). IRPJ e CSLL ficam fora no lucro real e presumido (Súmula TCU 254); no Simples, a exclusão é opcional, conforme o edital.
+
+**Markup divisor:** `Preço = custo direto ÷ [1 − (I + DF + DV + L)]`, com tributos, despesas fixas, despesas variáveis e lucro em % do preço de venda; o multiplicador é `1 ÷ divisor`.
 
 **Comercial.** O funil acompanha cada licitação ou proposta privada (prospecção → análise do edital → proposta → disputa → habilitação → ganha/perdida). O estudo de preço atualiza o valor da proposta na oportunidade; quando ela é ganha, **Gerar contrato** cria o contrato (modelo da Administração Pública para licitações) com valor mensal e vigência.
 
-> Os parâmetros tributários e trabalhistas são pontos de partida: confira-os com o contador da empresa e com a convenção coletiva vigente. Contratos com dedicação exclusiva de mão de obra (posto residente) podem caracterizar cessão de mão de obra, vedada no Simples Nacional (LC 123/2006, art. 17, XII). Os valores da demonstração são fictícios.
+> Os parâmetros tributários e trabalhistas são pontos de partida: confira-os com o contador da empresa e com a convenção coletiva vigente. Contratos com dedicação exclusiva de mão de obra (posto residente) podem caracterizar cessão de mão de obra, vedada no Simples Nacional (LC 123/2006, art. 17, XII) e ao MEI. Os valores da demonstração são fictícios.
 
 ## Onde ficam os dados
 

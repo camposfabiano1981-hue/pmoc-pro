@@ -3,7 +3,35 @@ import { marcarRotina } from './marcas';
 import { inteiroPorExtenso, valorPorExtenso } from './extenso';
 import { clausulasContrato, mesesVigencia, ordinal } from './contrato';
 import type { CargoPreco, Equipamento, Rotina } from '../db/types';
-import { FAIXAS_BDI, PARAMETROS_PADRAO, analisarExequibilidade, calcBdi, calcularEstudo, custoCargo, encargosGrupoA, farol, horasMes, horasPlanoMes, round2, simplesAnexoIII, tributosFaturamento } from './precificacao';
+import {
+  COMPOSICAO_PADRAO,
+  FAIXAS_BDI,
+  PARAMETROS_PADRAO,
+  REFERENCIAS_BDI,
+  VEICULO_PADRAO,
+  alertasDoRegime,
+  analisarExequibilidade,
+  calcBdi,
+  calcMarkup,
+  calcularEstudo,
+  componentesDoQuartil,
+  custoCargo,
+  custoPessoalCargo,
+  custoVeiculo,
+  custosHora,
+  dasMei,
+  despesasFixas,
+  encargoVinculo,
+  encargosGrupoA,
+  farol,
+  ferramentaMensal,
+  formacaoPreco,
+  horasMes,
+  horasPlanoMes,
+  round2,
+  simplesAnexoIII,
+  tributosFaturamento,
+} from './precificacao';
 import { describe, expect, it } from 'vitest';
 import { isDue, monthIndex, matrizAnual, foraDaFaixa } from './schedule';
 import { diagnosticar, tSat } from './hvac';
@@ -222,5 +250,87 @@ describe('precificação', () => {
     expect(analisarExequibilidade(7000, 10000, 'engenharia', 12).alertas.some((a) => a.texto.includes('75%'))).toBe(true);
     expect(analisarExequibilidade(8000, 10000, 'engenharia', 12).garantiaAdicional).toBe(24000);
     expect(analisarExequibilidade(4500, 10000, 'comum', 12).alertas.some((a) => a.texto.includes('50%'))).toBe(true);
+  });
+  it('MEI: DAS fixo, encargos do empregado e alertas de limite', () => {
+    const mei = { ...PARAMETROS_PADRAO, regime: 'mei' as const, faturamentoMensal: 6000 };
+    expect(dasMei(mei)).toBeCloseTo(86.05, 6); // 5% de R$ 1.621 + R$ 5 de ISS
+    expect(tributosFaturamento(mei).total).toBe(0);
+    expect(encargosGrupoA(mei).total).toBe(11); // 3% de CPP + 8% de FGTS
+    expect(encargoVinculo('socio', mei).aliquota).toBe(0);
+    expect(despesasFixas(mei).total).toBeCloseTo(86.05, 6);
+    const f = formacaoPreco({ metodo: 'markup', bdi: PARAMETROS_PADRAO.bdi }, mei, 0);
+    const alertas = alertasDoRegime(mei, 100000, [{ quantidade: 2, vinculo: 'clt' }], f);
+    expect(alertas.some((a) => a.nivel === 'critico' && a.texto.includes('limite do MEI'))).toBe(true);
+    expect(alertas.some((a) => a.texto.includes('apenas um empregado'))).toBe(true);
+    expect(alertasDoRegime(mei, 30000, [{ quantidade: 1, vinculo: 'clt' }], f)).toHaveLength(0);
+  });
+  it('vínculos: pró-labore e autônomo sem provisões trabalhistas', () => {
+    const pres = { ...PARAMETROS_PADRAO, regime: 'presumido' as const };
+    const socio = custoCargo({ vinculo: 'socio', salarioBase: 5000 }, pres);
+    expect(socio.modulo21).toBe(0);
+    expect(socio.modulo3).toBe(0);
+    expect(socio.modulo22).toBeCloseTo(1000, 6); // 20% de INSS patronal sobre o pró-labore
+    expect(custoCargo({ vinculo: 'socio', salarioBase: 5000 }, PARAMETROS_PADRAO).modulo22).toBe(0); // Simples: CPP no DAS
+    const aut = custoCargo({ vinculo: 'autonomo', salarioBase: 2000, valeAlimentacaoDia: 25, diasMes: 20 }, pres);
+    expect(aut.modulo22).toBeCloseTo(400, 6);
+    expect(aut.modulo23).toBeCloseTo(500, 6);
+    expect(custoCargo({ vinculo: 'autonomo', salarioBase: 2000 }, { ...pres, inssAutonomo: 0 }).modulo22).toBe(0);
+  });
+  it('composição: ferramentas, veículo e itens de pessoal por cargo', () => {
+    expect(ferramentaMensal({ id: 'x', descricao: '', quantidade: 2, valorUnit: 1200, vidaUtilMeses: 48, residualPct: 10, manutencaoAnual: 120 })).toBeCloseTo((2 * 1200 * 0.9) / 48 + 10, 6);
+    const v = custoVeiculo({ ...VEICULO_PADRAO, valorAquisicao: 100000, vidaUtilAnos: 5, residualPct: 40, ipvaAnual: 3000, seguroAnual: 3000, precoCombustivel: 6, consumoKmL: 10, manutencaoKm: 0.2, pneusKm: 0.1 });
+    expect(v.depreciacao).toBeCloseTo(1000, 6); // R$ 60.000 em 60 meses
+    expect(v.fixoMensal).toBeCloseTo(1500, 6);
+    expect(v.variavelKm).toBeCloseTo(0.9, 6);
+    const comp = {
+      ...COMPOSICAO_PADRAO,
+      pessoal: [
+        { id: 'a', categoria: 'epi' as const, descricao: 'Botina', qtdAno: 2, valorUnit: 120 },
+        { id: 'b', categoria: 'treinamento' as const, descricao: 'NR-10', qtdAno: 0.5, valorUnit: 480, cargos: ['ele'] },
+      ],
+    };
+    expect(custoPessoalCargo('tec', comp).total).toBeCloseTo(20, 6);
+    expect(custoPessoalCargo('ele', comp).total).toBeCloseTo(40, 6);
+    expect(custoCargo({ id: 'ele', salarioBase: 0 }, { ...PARAMETROS_PADRAO, composicao: comp }).insumos).toBeCloseTo(40, 6);
+    expect(custoCargo({ id: 'ele', salarioBase: 0, uniformeEpiMes: 70 }, { ...PARAMETROS_PADRAO, composicao: comp }).insumos).toBe(70); // cargo antigo, manual
+  });
+  it('markup divisor, quartis do TCU e BDI diferenciado de materiais', () => {
+    const m = calcMarkup({ comissaoPct: 2, cartaoPct: 1, inadimplenciaPct: 1, lucroPct: 10 }, 6, 10);
+    expect(m.soma).toBe(30);
+    expect(m.multiplicador).toBeCloseTo(1 / 0.7, 6);
+    expect(m.bdi).toBeCloseTo((1 / 0.7 - 1) * 100, 6);
+    expect(calcMarkup({ comissaoPct: 0, cartaoPct: 0, inadimplenciaPct: 0, lucroPct: 50 }, 30, 20).valido).toBe(false);
+    expect(componentesDoQuartil(REFERENCIAS_BDI.edificacoes, 1)).toEqual({ ac: 4, s: 0.4, g: 0.4, r: 1.27, l: 7.4 });
+    const f = formacaoPreco({ metodo: 'tcu', bdi: PARAMETROS_PADRAO.bdi, bdiMateriais: { ...PARAMETROS_PADRAO.bdiMateriais, ativo: true } }, PARAMETROS_PADRAO, 8.65);
+    expect(f.materiais.ativo).toBe(true);
+    expect(f.materiais.bdi).toBeLessThan(f.bdi);
+    // quartil médio de materiais com PIS + Cofins (3,65%) e DF de 0,85%: 15,28%, como nas planilhas que aplicam o acórdão
+    expect(calcBdi({ ...componentesDoQuartil(REFERENCIAS_BDI.materiais, 1), prazoDias: 30, taxaMes: 0.85 }, 3.65).bdi).toBeCloseTo(15.28, 2);
+  });
+  it('estudo: ferramentas e veículo pelas horas e materiais com BDI próprio', () => {
+    const p = {
+      ...PARAMETROS_PADRAO,
+      composicao: { ...COMPOSICAO_PADRAO, ferramentas: [{ id: 'k', descricao: 'Kit', quantidade: 1, valorUnit: 12000, vidaUtilMeses: 60, residualPct: 0, manutencaoAnual: 0 }] },
+      bdiMateriais: { ...PARAMETROS_PADRAO.bdiMateriais, ativo: true },
+    };
+    const cargos = new Map([['t', { id: 't', nome: 'Técnico', salarioBase: 3000, ativo: true, createdAt: '', updatedAt: '' } as CargoPreco]]);
+    const base = {
+      equipe: [{ cargoId: 't', quantidade: 1 }],
+      itens: [{ id: '1', descricao: 'Split', horasManual: 2, fatorTempo: 1, corretivaPct: 0, materiaisMes: 10, quantidade: 1 }],
+      deslocamento: { visitasMes: 0, minutosVisita: 0, kmMes: 0, custoKm: 0 },
+      custosFixos: [],
+      rateio: 'horas' as const,
+      bdi: PARAMETROS_PADRAO.bdi,
+      vigenciaMeses: 12,
+      tipoServico: 'engenharia' as const,
+      bdiMateriais: p.bdiMateriais,
+    };
+    const r = calcularEstudo({ ...base, kits: 1 }, { params: p, cargos, planos: new Map() });
+    const it = r.itens[0];
+    expect(r.ferramentasHora).toBeCloseTo(200 / custosHora(p).horas, 6);
+    expect(it.custoEquip).toBeCloseTo(2 * r.ferramentasHora, 6);
+    expect(it.precoUnit).toBeCloseTo(round2((it.custoMO + it.custoEquip) * (1 + r.bdi / 100) + 10 * (1 + r.formacao.materiais.bdi / 100)), 6);
+    expect(r.precoHoraTecnica).toBeCloseTo(round2(r.custoHoraOperacional * (1 + r.bdi / 100)), 6);
+    expect(calcularEstudo(base, { params: p, cargos, planos: new Map() }).equipamentosMensal).toBe(0); // estudo antigo, sem kits
   });
 });

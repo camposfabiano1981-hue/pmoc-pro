@@ -1,45 +1,70 @@
 import { Percent, RotateCcw } from 'lucide-react';
-import { Button, Card, Field, PageHeader, Select, Toggle, cx } from '../../components/ui';
-import { FarolBadge, Num, num, pct, useParametrosEditaveis } from '../../components/precoUi';
+import { Button, Card, PageHeader, Select, Toggle, cx, useConfirm } from '../../components/ui';
+import { Num, num, pct, useParametrosEditaveis } from '../../components/precoUi';
 import { money } from '../../lib/format';
-import { FAIXAS_BDI, calcBdi, encargosGrupoA, farol, fatorReoneracao, horasMes, tributosFaturamento } from '../../lib/precificacao';
+import { MEI_LIMITE, REGIMES, dasMei, encargoVinculo, encargosGrupoA, fatorReoneracao, horasMes, inssAutonomoPadrao, tributosFaturamento } from '../../lib/precificacao';
+import type { RegimeTributario } from '../../db/types';
+import { FormacaoPrecoEditor } from './FormacaoPreco';
 
-/** Parâmetros de precificação: regime tributário, encargos, provisões, horas produtivas e BDI padrão. */
+/** Parâmetros de precificação: regime tributário, encargos, provisões, horas produtivas e formação do preço padrão. */
 export default function TributosPage() {
   const [p, upd, restaurar, salvo] = useParametrosEditaveis();
+  const confirm = useConfirm();
   if (!p) return <p className="text-sm text-slate-500">Carregando…</p>;
   const trib = tributosFaturamento(p);
   const ga = encargosGrupoA(p);
   const h = horasMes(p);
-  const { bdi, df } = calcBdi(p.bdi, trib.total);
   const reon = fatorReoneracao(p.anoBase);
   const s = trib.simples;
-  const bdiUpd = (patch: Partial<typeof p.bdi>) => upd({ bdi: { ...p.bdi, ...patch } });
+  const socio = encargoVinculo('socio', p);
   const linha = 'flex items-center justify-between gap-3 border-b border-slate-100 py-1 text-sm last:border-0 dark:border-slate-800';
 
   return (
     <div>
       <PageHeader
-        title="Tributos, encargos e BDI"
-        subtitle="Parâmetros usados no custo-hora da equipe e em todos os estudos de preço"
+        title="Tributos, encargos e formação do preço"
+        subtitle="Regime tributário, encargos, provisões, horas produtivas e o BDI/markup padrão dos novos estudos"
         icon={<Percent size={20} />}
         actions={
           <>
             <span className="text-xs text-slate-500">{salvo ? 'Salvo' : 'Salvando…'}</span>
-            <Button variant="outline" icon={<RotateCcw size={16} />} onClick={restaurar}>Restaurar padrões</Button>
+            <Button
+              variant="outline"
+              icon={<RotateCcw size={16} />}
+              onClick={async () => {
+                if (await confirm({ title: 'Restaurar padrões', message: 'Voltar regime, encargos, provisões, horas e formação do preço aos valores iniciais? As tabelas da composição de custos e o faturamento médio são mantidos.', confirmText: 'Restaurar' })) restaurar();
+              }}
+            >
+              Restaurar padrões
+            </Button>
           </>
         }
       />
       <div className="grid gap-4 xl:grid-cols-2">
         <Card title="Regime tributário da empresa">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Regime" className="sm:col-span-2">
-              <Select value={p.regime} onChange={(e) => upd({ regime: e.target.value as typeof p.regime })}>
-                <option value="simples">Simples Nacional — Anexo III (serviços de manutenção)</option>
-                <option value="presumido">Lucro Presumido</option>
-                <option value="real">Lucro Real</option>
+            <label className="sm:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Regime</span>
+              <Select value={p.regime} onChange={(e) => upd({ regime: e.target.value as RegimeTributario })}>
+                {REGIMES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </Select>
-            </Field>
+            </label>
+            {p.regime === 'mei' && (
+              <>
+                <Num label="DAS mensal" prefix="R$" value={p.meiDas} placeholder={num(dasMei({ ...p, meiDas: undefined }))} onChange={(v) => upd({ meiDas: v })} help={`5% do salário mínimo (${money(p.salarioMinimo * 0.05)}) + R$ 5,00 de ISS. Vazio = calculado.`} />
+                <Num label="Limite anual de faturamento" prefix="R$" value={p.meiLimite} onChange={(v) => upd({ meiLimite: v ?? MEI_LIMITE })} help="R$ 81.000,00 (LC 123, art. 18-A, §1º)" />
+                <Num label="Faturamento mensal médio" prefix="R$" value={p.faturamentoMensal} onChange={(v) => upd({ faturamentoMensal: v ?? 0 })} className="sm:col-span-2" />
+                <BarraLimite anual={p.faturamentoMensal * 12} limite={p.meiLimite || MEI_LIMITE} />
+                <ul className="list-disc space-y-1 rounded-lg bg-sky-50 py-2.5 pl-7 pr-3 text-xs text-sky-950 sm:col-span-2 dark:bg-sky-950/40 dark:text-sky-100">
+                  <li>Ocupação permitida: instalador(a) e reparador(a) de sistemas centrais de ar condicionado, ventilação e refrigeração (CNAE 4322-3/02).</li>
+                  <li>Não há tributo proporcional ao preço: o DAS é fixo e entra nas despesas fixas. Por isso o <b>markup</b> é o método indicado.</li>
+                  <li>Cadastre o titular como “sócio ou titular (pró-labore)”: o INSS dele já está no DAS.</li>
+                  <li>Um único empregado (salário mínimo ou piso da categoria): 3% de INSS patronal + 8% de FGTS (LC 123, art. 18-C).</li>
+                  <li>Faturou acima do limite: até 20% a mais, recolhe sobre o excesso e deixa o MEI no ano seguinte; acima de 20%, o desenquadramento retroage a janeiro.</li>
+                  <li>O MEI não pode ceder mão de obra (posto residente). Em licitações, tem os benefícios de ME/EPP da LC 123 (arts. 42 a 49).</li>
+                </ul>
+              </>
+            )}
             {p.regime === 'simples' && (
               <>
                 <Num label="Receita bruta dos últimos 12 meses (RBT12)" prefix="R$" value={p.rbt12} onChange={(v) => upd({ rbt12: v ?? 0 })} className="sm:col-span-2" />
@@ -67,7 +92,7 @@ export default function TributosPage() {
                 </p>
               </>
             )}
-            {p.regime !== 'simples' && (
+            {(p.regime === 'presumido' || p.regime === 'real') && (
               <>
                 {p.regime === 'presumido' ? (
                   <div className="rounded-lg bg-slate-50 p-3 text-sm sm:col-span-2 dark:bg-slate-800/60">PIS 0,65% + Cofins 3,00% (regime cumulativo).</div>
@@ -89,13 +114,15 @@ export default function TributosPage() {
                 )}
               </>
             )}
-            <Num label="Tributos “por fora” do preço (cenário da reforma)" suffix="%" value={p.tributosPorFora} onChange={(v) => upd({ tributosPorFora: v ?? 0 })} className="sm:col-span-2" help="Em 2026 a CBS (0,9%) e o IBS (0,1%) estão em teste e são compensáveis com PIS/Cofins, sem alterar o preço. Use para simular 2027 em diante." />
+            {p.regime !== 'mei' && (
+              <Num label="Tributos “por fora” do preço (cenário da reforma)" suffix="%" value={p.tributosPorFora} onChange={(v) => upd({ tributosPorFora: v ?? 0 })} className="sm:col-span-2" help="Em 2026 a CBS (0,9%) e o IBS (0,1%) estão em teste e são compensáveis com PIS/Cofins, sem alterar o preço. Use para simular 2027 em diante." />
+            )}
           </div>
           <div className="mt-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-            <p className="mb-1 text-xs font-semibold uppercase text-slate-500">Taxa de tributos sobre o faturamento (I do BDI)</p>
+            <p className="mb-1 text-xs font-semibold uppercase text-slate-500">Taxa de tributos sobre o faturamento (I)</p>
             {trib.itens.map((t) => (
               <div key={t.nome} className={cx(linha, t.excluido && 'text-slate-400 line-through')}>
-                <span>{t.nome}</span>
+                <span>{t.nome}{t.obs && <span className="block text-xs text-slate-500">{t.obs}</span>}</span>
                 <span className="tabular-nums">{pct(t.aliquota, 3)}</span>
               </div>
             ))}
@@ -107,40 +134,13 @@ export default function TributosPage() {
           </div>
         </Card>
 
-        <Card title="BDI padrão (Acórdão TCU 2622/2013)">
-          <p className="mb-3 rounded-lg bg-slate-50 p-2.5 text-center font-mono text-xs dark:bg-slate-800/60">BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L) ÷ (1 − I)] − 1</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Num label="AC — Administração central" suffix="%" value={p.bdi.ac} onChange={(v) => bdiUpd({ ac: v ?? 0 })} />
-              <div className="mt-1"><FarolBadge f={farol(p.bdi.ac, FAIXAS_BDI.ac)} faixa={FAIXAS_BDI.ac} /></div>
+        <Card title="Encargos sobre a remuneração">
+          {p.regime === 'mei' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Num label="FGTS do empregado" suffix="%" value={p.fgts} onChange={(v) => upd({ fgts: v ?? 0 })} />
+              <p className="text-xs text-slate-500 sm:pt-6">MEI com empregado: 3% de INSS patronal (CPP), sem RAT e sem terceiros.</p>
             </div>
-            <div>
-              <Num label="L — Lucro" suffix="%" value={p.bdi.l} onChange={(v) => bdiUpd({ l: v ?? 0 })} />
-              <div className="mt-1"><FarolBadge f={farol(p.bdi.l, FAIXAS_BDI.l)} faixa={FAIXAS_BDI.l} /></div>
-            </div>
-            <Num label="S — Seguros" suffix="%" value={p.bdi.s} onChange={(v) => bdiUpd({ s: v ?? 0 })} />
-            <Num label="G — Garantias" suffix="%" value={p.bdi.g} onChange={(v) => bdiUpd({ g: v ?? 0 })} help={<FarolBadge f={farol(p.bdi.s + p.bdi.g, FAIXAS_BDI.sg)} faixa={FAIXAS_BDI.sg} />} />
-            <div>
-              <Num label="R — Riscos" suffix="%" value={p.bdi.r} onChange={(v) => bdiUpd({ r: v ?? 0 })} />
-              <div className="mt-1"><FarolBadge f={farol(p.bdi.r, FAIXAS_BDI.r)} faixa={FAIXAS_BDI.r} /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Num label="Prazo de recebimento" suffix="dias" value={p.bdi.prazoDias} onChange={(v) => bdiUpd({ prazoDias: v ?? 0 })} />
-              <Num label="Taxa financeira" suffix="% a.m." value={p.bdi.taxaMes} onChange={(v) => bdiUpd({ taxaMes: v ?? 0 })} />
-              <p className="col-span-2 text-xs">DF = (1 + taxa)^(prazo/30) − 1 = <b>{pct(df, 3)}</b> <FarolBadge f={farol(df, FAIXAS_BDI.df)} /></p>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 p-3 dark:bg-brand-950/50">
-            <span className="text-sm">BDI resultante com I = {pct(trib.total)}</span>
-            <span className="text-2xl font-bold text-brand-800 dark:text-brand-200">{pct(bdi)}</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Faixas de referência: 1º a 3º quartil do Acórdão 2622/2013 para obras de edificação (total {FAIXAS_BDI.total[0].toLocaleString('pt-BR')}% a {FAIXAS_BDI.total[1].toLocaleString('pt-BR')}%), usadas como parâmetro para serviços de engenharia. IRPJ e CSLL não entram no BDI (Súmula TCU 254). Este BDI é o ponto de partida de cada novo estudo.
-          </p>
-        </Card>
-
-        <Card title="Encargos sociais sobre a folha (Grupo A)">
-          {p.regime === 'simples' ? (
+          ) : p.regime === 'simples' ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <Num label="FGTS" suffix="%" value={p.fgts} onChange={(v) => upd({ fgts: v ?? 0 })} />
               <p className="text-xs text-slate-500 sm:pt-6">INSS patronal, RAT e terceiros estão dentro do DAS no Anexo III.</p>
@@ -153,20 +153,33 @@ export default function TributosPage() {
               <Num label="FGTS" suffix="%" value={p.fgts} onChange={(v) => upd({ fgts: v ?? 0 })} />
             </div>
           )}
-          <div className="mt-3">
-            {ga.itens.map((t) => (
-              <div key={t.nome} className={linha}>
-                <span>{t.nome}{t.obs && <span className="text-xs text-slate-500"> — {t.obs}</span>}</span>
-                <span className="tabular-nums">{pct(t.aliquota)}</span>
-              </div>
-            ))}
-            <div className={cx(linha, 'font-bold')}>
-              <span>Total do Grupo A</span>
-              <span className="tabular-nums">{pct(ga.total)}</span>
+          <p className="mb-1 mt-3 text-xs font-semibold uppercase text-slate-500">Empregados CLT — Grupo A</p>
+          {ga.itens.map((t) => (
+            <div key={t.nome} className={linha}>
+              <span>{t.nome}{t.obs && <span className="text-xs text-slate-500"> — {t.obs}</span>}</span>
+              <span className="tabular-nums">{pct(t.aliquota)}</span>
             </div>
+          ))}
+          <div className={cx(linha, 'font-bold')}>
+            <span>Total do Grupo A</span>
+            <span className="tabular-nums">{pct(ga.total)}</span>
+          </div>
+          <p className="mb-1 mt-4 text-xs font-semibold uppercase text-slate-500">Sócios e autônomos</p>
+          <div className={linha}>
+            <span>Pró-labore<span className="block text-xs text-slate-500">{socio.nome}</span></span>
+            <span className="tabular-nums">{pct(socio.aliquota)}</span>
+          </div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <Num label="INSS patronal sobre autônomos (RPA)" suffix="%" value={p.inssAutonomo} placeholder={num(inssAutonomoPadrao(p))} onChange={(v) => upd({ inssAutonomo: v })} help={`Vazio = padrão do regime (${pct(inssAutonomoPadrao(p))}). No Simples e no MEI a contribuição patronal já está no DAS; confirme com o contador.`} />
           </div>
         </Card>
+      </div>
 
+      <h2 className="mb-1 mt-8 text-base font-semibold text-slate-900 dark:text-white">Formação do preço — padrão dos novos estudos</h2>
+      <p className="mb-3 text-sm text-slate-500">Cada estudo copia estes valores e pode mudar o método ou os percentuais na aba “5. BDI e tributos”.</p>
+      <FormacaoPrecoEditor v={{ metodo: p.metodo, referenciaTcu: p.referenciaTcu, bdi: p.bdi, markup: p.markup, bdiMateriais: p.bdiMateriais }} onChange={(patch) => upd(patch)} params={p} tributos={trib.total} />
+
+      <div className="mt-8 grid gap-4 xl:grid-cols-2">
         <Card title="Provisões trabalhistas (% sobre a remuneração)">
           <div className="grid gap-3 sm:grid-cols-3">
             <Num label="13º salário" suffix="%" value={p.decimoTerceiro} onChange={(v) => upd({ decimoTerceiro: v ?? 0 })} />
@@ -178,12 +191,12 @@ export default function TributosPage() {
           </div>
           <p className="mt-2 text-xs text-slate-500">Estrutura da planilha da IN SEGES 5/2017 (submódulo 2.1 e módulo 3), aplicável à Lei 14.133 pela IN SEGES/ME 98/2022. Ajuste conforme o edital.</p>
           <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <Num label="Salário mínimo (base da insalubridade)" prefix="R$" value={p.salarioMinimo} onChange={(v) => upd({ salarioMinimo: v ?? 0 })} help="R$ 1.621,00 em 2026 (Decreto 12.797/2025)" className="max-w-xs" />
+            <Num label="Salário mínimo (base da insalubridade e do DAS-MEI)" prefix="R$" value={p.salarioMinimo} onChange={(v) => upd({ salarioMinimo: v ?? 0 })} help="R$ 1.621,00 em 2026 (Decreto 12.797/2025)" className="max-w-sm" />
           </div>
         </Card>
 
-        <Card title="Horas produtivas da equipe" className="xl:col-span-2">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Card title="Horas produtivas da equipe">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Num label="Jornada semanal" suffix="h" value={p.jornadaSemanal} onChange={(v) => upd({ jornadaSemanal: v ?? 44 })} />
             <Num label="Feriados por ano" suffix="dias" value={p.feriadosAno} onChange={(v) => upd({ feriadosAno: v ?? 0 })} />
             <Num label="Férias (dias úteis)" suffix="dias" value={p.feriasDiasUteis} onChange={(v) => upd({ feriasDiasUteis: v ?? 0 })} />
@@ -198,6 +211,22 @@ export default function TributosPage() {
             {h.diasAno} dias trabalhados por ano × {num(p.jornadaSemanal / 5, 1)} h ÷ 12 = {num(h.disponiveis, 1)} h disponíveis/mês × {p.produtividade}% de produtividade. As férias e ausências já são pagas pelas provisões; por isso saem das horas e o custo-hora fica correto. O deslocamento entre clientes é custeado à parte no estudo.
           </p>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function BarraLimite({ anual, limite }: { anual: number; limite: number }) {
+  const uso = limite > 0 ? (anual / limite) * 100 : 0;
+  const cor = uso > 100 ? 'bg-rose-500' : uso > 80 ? 'bg-amber-500' : 'bg-emerald-500';
+  return (
+    <div className="sm:col-span-2">
+      <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
+        <span>Faturamento anual previsto: <b>{money(anual)}</b></span>
+        <span>{pct(uso, 0)} do limite</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+        <div className={cx('h-full rounded-full', cor)} style={{ width: `${Math.min(100, uso)}%` }} />
       </div>
     </div>
   );

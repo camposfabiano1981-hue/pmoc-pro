@@ -67,7 +67,7 @@ export default function EstudosPage() {
       />
       {cargos.filter((c) => c.ativo && c.salarioBase > 0).length === 0 && (
         <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          Antes do primeiro estudo, cadastre a equipe em <Link to="/precificacao/equipe" className="font-semibold underline">Equipe e custo-hora</Link> (salários da CCT) e confira o regime em <Link to="/precificacao/tributos" className="font-semibold underline">Tributos, encargos e BDI</Link>.
+          Antes do primeiro estudo, cadastre a equipe em <Link to="/precificacao/equipe" className="font-semibold underline">Equipe e custo-hora</Link> (salários da CCT), preencha a <Link to="/precificacao/custos" className="font-semibold underline">Composição de custos</Link> e confira o regime em <Link to="/precificacao/tributos" className="font-semibold underline">Tributos e formação do preço</Link>.
         </p>
       )}
       <Card bodyClass="p-0">

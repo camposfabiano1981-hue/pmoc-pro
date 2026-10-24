@@ -5,14 +5,15 @@ import { AlertTriangle, ArrowLeft, Calculator, CheckCircle2, Info, Plus, Printer
 import { db, nowIso, uid } from '../../db/db';
 import type { CargoPreco, EstudoPreco, ItemEstudo, ParametrosPreco } from '../../db/types';
 import { Badge, Button, Card, Field, IconButton, Input, Modal, PageHeader, Select, Tabs, Textarea, cx, useToast } from '../../components/ui';
-import { FarolBadge, Num, num, pct } from '../../components/precoUi';
+import { LinhaResumo, Num, num, pct } from '../../components/precoUi';
 import { useLookups, type Lookups } from '../../lib/lookups';
 import { money, todayStr } from '../../lib/format';
 import { valorPorExtenso } from '../../lib/extenso';
-import { FAIXAS_BDI, calcularEstudo, custoCargo, faixaBtu, farol, fatorHistorico, horasPlanoMes, type ResultadoEstudo } from '../../lib/precificacao';
+import { REGIMES, calcularEstudo, custoCargo, custoKmSugerido, custosHora, faixaBtu, fatorHistorico, horasPlanoMes, materiaisSugeridos, vinculoDe, type AlertaPreco, type ResultadoEstudo } from '../../lib/precificacao';
 import { useParametrosPreco } from '../../lib/precificacaoDb';
 import { planoSugerido } from '../../db/planosPadrao';
 import { STATUS_ESTUDO, statusEstudo } from './Estudos';
+import { FormacaoPrecoEditor, type ValoresFormacao } from './FormacaoPreco';
 
 type Aba = 'dados' | 'equipe' | 'itens' | 'indiretos' | 'bdi' | 'resultado';
 type Upd = (patch: Partial<EstudoPreco>) => void;
@@ -104,7 +105,7 @@ export default function EstudoEditor() {
             {aba === 'itens' && <AbaItens e={e} upd={upd} r={r} params={params} l={l} />}
             {aba === 'indiretos' && <AbaIndiretos e={e} upd={upd} r={r} params={params} />}
             {aba === 'bdi' && <AbaBdi e={e} upd={upd} r={r} params={params} />}
-            {aba === 'resultado' && <AbaResultado e={e} upd={upd} r={r} />}
+            {aba === 'resultado' && <AbaResultado e={e} upd={upd} r={r} params={params} />}
           </div>
         </div>
         <Resumo e={e} r={r} />
@@ -126,9 +127,11 @@ function Resumo({ e, r }: { e: EstudoPreco; r: ResultadoEstudo }) {
     <div className="xl:sticky xl:top-20 xl:self-start">
       <Card title="Resumo do preço" bodyClass="p-4 text-sm">
         {linha('Custo-hora da equipe', money(r.custoHoraEquipe))}
+        {(r.ferramentasHora > 0 || r.veiculoHora > 0) && linha('+ ferramentas e veículo', `${money(r.ferramentasHora + r.veiculoHora)}/h`)}
         {linha('Horas técnicas/mês', `${num(r.horasMes, 1)} h`)}
         {linha('Custo direto/mês', money(r.custoDiretoMensal))}
-        {linha('BDI', pct(r.bdi))}
+        {linha(r.formacao.metodo === 'markup' ? `Markup (× ${num(r.formacao.markup?.multiplicador, 3)})` : 'BDI (TCU)', pct(r.bdi))}
+        {r.formacao.materiais.ativo && linha('BDI dos materiais', pct(r.formacao.materiais.bdi))}
         <div className="my-2 rounded-lg bg-brand-50 p-3 dark:bg-brand-950/50">
           <p className="text-xs text-slate-500">Preço mensal</p>
           <p className="text-2xl font-bold text-brand-800 dark:text-brand-200">{money(r.precoMensal)}</p>
@@ -136,7 +139,9 @@ function Resumo({ e, r }: { e: EstudoPreco; r: ResultadoEstudo }) {
         {linha('Anual (12 meses)', money(r.precoAnual))}
         {linha(`Vigência (${e.vigenciaMeses} meses)`, money(r.precoVigencia), true)}
         {linha('Lance mínimo (lucro zero)/mês', money(r.lanceMinimoMensal))}
+        {linha('Preço da hora técnica', money(r.precoHoraTecnica))}
         {r.tributos.porFora > 0 && linha(`Com tributos por fora (${pct(r.tributos.porFora)})`, money(r.precoMensalComPorFora))}
+        {r.alertasRegime.length > 0 && <div className="mt-2 space-y-1">{r.alertasRegime.map((a, k) => <Alerta key={k} a={a} compacto />)}</div>}
         {c && (
           <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
             {linha('Valor estimado/mês', money(e.valorEstimadoMensal))}
@@ -189,6 +194,13 @@ function AbaDados({ e, upd, l }: { e: EstudoPreco; upd: Upd; l: Lookups }) {
             <option value="comum">Serviço comum (IN SEGES/ME 73/2022, art. 34)</option>
           </Select>
         </Field>
+        <Field label="Responsável técnico pela composição" className="sm:col-span-2" help="Sai na assinatura da planilha impressa">
+          <Select value={e.responsavelId || ''} onChange={(x) => upd({ responsavelId: x.target.value || undefined })}>
+            <option value="">— não informado —</option>
+            {l.profissionais.map((pr) => <option key={pr.id} value={pr.id}>{pr.nome}{pr.registro ? ` — ${pr.conselho || 'registro'} ${pr.registro}` : ''}</option>)}
+          </Select>
+        </Field>
+        <Num label="Validade da proposta" suffix="dias" value={e.validadeDias} placeholder="60" onChange={(v) => upd({ validadeDias: v === undefined ? undefined : Math.max(1, Math.round(v)) })} />
         <Num label="Vigência" suffix="meses" value={e.vigenciaMeses} onChange={(v) => upd({ vigenciaMeses: Math.max(1, Math.round(v || 12)) })} />
         <Num label="Valor estimado do órgão — mensal" prefix="R$" value={e.valorEstimadoMensal} onChange={(v) => upd({ valorEstimadoMensal: v })} />
         <Num label={`Valor estimado — total (${vig} meses)`} prefix="R$" value={e.valorEstimadoMensal ? Math.round(e.valorEstimadoMensal * vig * 100) / 100 : undefined} onChange={(v) => upd({ valorEstimadoMensal: v ? Math.round((v / vig) * 100) / 100 : undefined })} className="sm:col-span-2" help="Informe o total do edital e o mensal é calculado" />
@@ -215,7 +227,7 @@ function AbaEquipe({ e, upd, cargos, params, r }: { e: EstudoPreco; upd: Upd; ca
               <Field label="Cargo" className="min-w-[220px] flex-1">
                 <Select value={m.cargoId} onChange={(x) => set(i, { cargoId: x.target.value })}>
                   <option value="">— selecione —</option>
-                  {ativos.map((c2) => <option key={c2.id} value={c2.id}>{c2.nome}</option>)}
+                  {ativos.map((c2) => <option key={c2.id} value={c2.id}>{c2.nome} ({vinculoDe(c2.vinculo).curto})</option>)}
                 </Select>
               </Field>
               <Num label="Quantidade" className="w-28" value={m.quantidade} onChange={(v) => set(i, { quantidade: v ?? 0 })} />
@@ -237,6 +249,13 @@ function AbaEquipe({ e, upd, cargos, params, r }: { e: EstudoPreco; upd: Upd; ca
         <Button size="sm" variant="outline" icon={<Plus size={14} />} onClick={() => upd({ equipe: [...e.equipe, { cargoId: ativos[0]?.id || '', quantidade: 1 }] })}>Adicionar integrante</Button>
         <span className="rounded-lg bg-brand-50 px-3 py-2 text-sm dark:bg-brand-950/50">Custo-hora da equipe: <b className="text-lg">{money(r.custoHoraEquipe)}</b></span>
       </div>
+      <div className="mt-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+        <LinhaResumo rotulo="Mão de obra da equipe" valor={`${money(r.custoHoraEquipe)}/h`} />
+        <LinhaResumo rotulo={`Ferramentas (${num(e.kits || 0, 0)} kit)`} valor={`${money(r.ferramentasHora)}/h`} dica="composição de custos ÷ horas produtivas" />
+        <LinhaResumo rotulo={`Veículo — custo fixo (${num(e.veiculos || 0, 0)})`} valor={`${money(r.veiculoHora)}/h`} />
+        <LinhaResumo rotulo="Custo-hora operacional" valor={`${money(r.custoHoraOperacional)}/h`} forte />
+        <LinhaResumo rotulo={`Preço da hora técnica (com ${r.formacao.metodo === 'markup' ? 'markup' : 'BDI'} de ${pct(r.bdi)})`} valor={money(r.precoHoraTecnica)} dica="referência para chamados avulsos e serviços extras" forte />
+      </div>
     </Card>
   );
 }
@@ -247,13 +266,19 @@ function AbaItens({ e, upd, r, params, l }: { e: EstudoPreco; upd: Upd; r: Resul
   const tarefas = useLiveQuery(() => db.os.toArray().then((os) => os.flatMap((o) => o.equipamentos.flatMap((it) => it.checklist))), []) || [];
   const hist = fatorHistorico(tarefas);
   const set = (i: number, patch: Partial<ItemEstudo>) => upd({ itens: e.itens.map((it, k) => (k === i ? { ...it, ...patch } : it)) });
-  const novoItem = (): ItemEstudo => ({ id: uid(), descricao: '', planoId: l.planos[0]?.id, fatorTempo: 1, corretivaPct: 10, materiaisMes: params.materiaisPadraoMes, quantidade: 1 });
+  const novoItem = (): ItemEstudo => ({ id: uid(), descricao: '', planoId: l.planos[0]?.id, fatorTempo: 1, corretivaPct: 10, materiaisMes: materiaisSugeridos(params, 1), quantidade: 1 });
+  const materiaisComp = materiaisSugeridos(params, 1);
   return (
     <div className="space-y-3">
       <Card bodyClass="p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button icon={<Wand2 size={16} />} onClick={() => setGerar(true)}>Gerar dos equipamentos cadastrados</Button>
           <Button variant="outline" icon={<Plus size={16} />} onClick={() => upd({ itens: [...e.itens, novoItem()] })}>Adicionar item</Button>
+          {materiaisComp > 0 && e.itens.length > 0 && (
+            <Button variant="ghost" title="Materiais/mês = insumos da composição × fator de porte de cada item" onClick={() => upd({ itens: e.itens.map((it) => ({ ...it, materiaisMes: materiaisSugeridos(params, it.fatorTempo) })) })}>
+              Materiais pela composição ({money(materiaisComp)} × fator)
+            </Button>
+          )}
           <span className="flex-1" />
           {hist && (
             <span className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
@@ -369,7 +394,7 @@ function GerarItensModal({ open, onClose, e, upd, params, l }: { open: boolean; 
       planoId: moda(g.planos) || planoSugerido(g.tipo, l.planos)?.id,
       fatorTempo: g.faixa?.fator ?? 1,
       corretivaPct: 10,
-      materiaisMes: params.materiaisPadraoMes,
+      materiaisMes: materiaisSugeridos(params, g.faixa?.fator ?? 1),
       quantidade: g.qtd,
     }));
     upd({ itens: substituir ? itens : [...e.itens, ...itens], clienteId: e.clienteId || clienteId || undefined });
@@ -426,21 +451,44 @@ function AbaIndiretos({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: Resu
   const d = e.deslocamento;
   const setD = (patch: Partial<EstudoPreco['deslocamento']>) => upd({ deslocamento: { ...d, ...patch } });
   const setC = (i: number, patch: Partial<EstudoPreco['custosFixos'][number]>) => upd({ custosFixos: e.custosFixos.map((c, k) => (k === i ? { ...c, ...patch } : c)) });
+  const ch = custosHora(params);
+  const kmSugerido = custoKmSugerido(params);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <Card title="Ferramentas e veículo (pela composição de custos)" className="lg:col-span-2" actions={<Link to="/precificacao/custos" className="text-xs text-brand-700 hover:underline dark:text-brand-300">composição de custos</Link>}>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Num label="Kits de ferramentas" value={e.kits ?? 0} onChange={(v) => upd({ kits: Math.max(0, v ?? 0) })} help={`${money(ch.ferramentas)}/h por kit`} />
+          <Num label="Veículos" value={e.veiculos ?? 0} onChange={(v) => upd({ veiculos: Math.max(0, v ?? 0) })} help={`${money(ch.veiculo)}/h de custo fixo por veículo`} />
+          <div className="rounded-lg bg-slate-50 p-3 text-sm sm:col-span-2 dark:bg-slate-800/60">
+            {num(r.horasMes, 1)} h de serviço × {money(r.ferramentasHora + r.veiculoHora)}/h = <b>{money(r.equipamentosMensal)}/mês</b>
+            <span className="block text-xs text-slate-500">Os custos fixos do kit e do veículo são divididos pelas horas produtivas do mês e cobrados pelas horas que o contrato consome.</span>
+          </div>
+        </div>
+        {(e.kits ?? 0) === 0 && (e.veiculos ?? 0) === 0 && e.custosFixos.some((c) => /ve[ií]culo|ferrament/i.test(c.descricao)) && (
+          <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            Este estudo ainda tem veículo e ferramentas como custo fixo (abaixo). Para usar a composição, informe kits e veículos e remova essas linhas — senão o custo conta duas vezes.
+          </p>
+        )}
+      </Card>
       <Card title="Deslocamento">
         <div className="grid grid-cols-2 gap-3">
           <Num label="Visitas por mês" value={d.visitasMes} onChange={(v) => setD({ visitasMes: v ?? 0 })} help="Idas da equipe às unidades" />
           <Num label="Tempo por visita (ida e volta)" suffix="min" value={d.minutosVisita} onChange={(v) => setD({ minutosVisita: v ?? 0 })} />
           <Num label="Km rodados por mês" suffix="km" value={d.kmMes} onChange={(v) => setD({ kmMes: v ?? 0 })} />
-          <Num label="Custo por km" prefix="R$" value={d.custoKm} onChange={(v) => setD({ custoKm: v ?? 0 })} />
+          <Num
+            label="Custo por km"
+            prefix="R$"
+            value={d.custoKm}
+            onChange={(v) => setD({ custoKm: v ?? 0 })}
+            help={kmSugerido > 0 && Math.abs(kmSugerido - (d.custoKm || 0)) > 0.005 ? <button type="button" className="font-semibold text-brand-700 underline dark:text-brand-300" onClick={() => setD({ custoKm: kmSugerido })}>usar o do veículo: {money(kmSugerido)}/km</button> : 'combustível, manutenção e pneus'}
+          />
         </div>
         <p className="mt-3 rounded-lg bg-slate-50 p-2.5 text-sm dark:bg-slate-800/60">
           {num(d.visitasMes, 0)} visitas × {num((d.minutosVisita || 0) / 60)} h × {money(r.custoHoraEquipe)}/h + {num(d.kmMes, 0)} km × {money(d.custoKm)} = <b>{money(r.deslocamentoMensal)}/mês</b>
         </p>
       </Card>
       <Card
-        title="Custos fixos mensais do contrato"
+        title="Outros custos mensais do contrato"
         actions={
           <>
             <Button size="sm" variant="ghost" icon={<RotateCcw size={14} />} onClick={() => upd({ custosFixos: [...e.custosFixos, ...params.custosPadrao.map((c) => ({ id: uid(), ...c }))] })}>Carregar padrão</Button>
@@ -456,7 +504,7 @@ function AbaIndiretos({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: Resu
               <IconButton title="Remover" onClick={() => upd({ custosFixos: e.custosFixos.filter((_, k) => k !== i) })}><Trash2 size={15} /></IconButton>
             </div>
           ))}
-          {!e.custosFixos.length && <p className="text-sm text-slate-500">Nenhum custo fixo.</p>}
+          {!e.custosFixos.length && <p className="text-sm text-slate-500">Nenhum custo. Ex.: responsável técnico e ART, supervisão do contrato, seguro-garantia.</p>}
         </div>
         <p className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-sm font-semibold dark:border-slate-800"><span>Total</span><span>{money(r.custosFixosMensal)}/mês</span></p>
       </Card>
@@ -466,7 +514,7 @@ function AbaIndiretos({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: Resu
             <option value="horas">Proporcional às horas de cada equipamento (recomendado)</option>
             <option value="equipamentos">Igual por equipamento</option>
           </Select>
-          <span className="text-sm">Total a ratear: <b>{money(r.deslocamentoMensal + r.custosFixosMensal)}/mês</b></span>
+          <span className="text-sm">Deslocamento + outros custos a ratear: <b>{money(r.deslocamentoMensal + r.custosFixosMensal)}/mês</b></span>
         </div>
         <p className="mt-2 text-xs text-slate-500">Pelas horas, equipamentos maiores ou com mais rotinas recebem uma parcela maior, o que mantém o preço por faixa coerente com o trabalho.</p>
       </Card>
@@ -476,37 +524,32 @@ function AbaIndiretos({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: Resu
 
 /* ---------------- 5. BDI e tributos ---------------- */
 function AbaBdi({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: ResultadoEstudo; params: ParametrosPreco }) {
-  const b = e.bdi;
-  const setB = (patch: Partial<EstudoPreco['bdi']>) => upd({ bdi: { ...b, ...patch } });
+  const v: ValoresFormacao = {
+    metodo: e.metodo || 'tcu',
+    referenciaTcu: e.referenciaTcu || params.referenciaTcu,
+    bdi: e.bdi,
+    markup: e.markup || params.markup,
+    bdiMateriais: e.bdiMateriais || { ...params.bdiMateriais, ativo: false },
+  };
+  const regime = REGIMES.find((x) => x.value === params.regime)?.label || params.regime;
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card title="Componentes do BDI" actions={<Button size="sm" variant="ghost" icon={<RotateCcw size={14} />} onClick={() => upd({ bdi: { ...params.bdi } })}>BDI padrão</Button>}>
-        <p className="mb-3 rounded-lg bg-slate-50 p-2.5 text-center font-mono text-xs dark:bg-slate-800/60">BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L) ÷ (1 − I)] − 1</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div><Num label="AC — Administração central" suffix="%" value={b.ac} onChange={(v) => setB({ ac: v ?? 0 })} /><div className="mt-1"><FarolBadge f={farol(b.ac, FAIXAS_BDI.ac)} faixa={FAIXAS_BDI.ac} /></div></div>
-          <div><Num label="L — Lucro" suffix="%" value={b.l} onChange={(v) => setB({ l: v ?? 0 })} /><div className="mt-1"><FarolBadge f={farol(b.l, FAIXAS_BDI.l)} faixa={FAIXAS_BDI.l} /></div></div>
-          <Num label="S — Seguros" suffix="%" value={b.s} onChange={(v) => setB({ s: v ?? 0 })} />
-          <div><Num label="G — Garantias" suffix="%" value={b.g} onChange={(v) => setB({ g: v ?? 0 })} /><div className="mt-1"><FarolBadge f={farol(b.s + b.g, FAIXAS_BDI.sg)} faixa={FAIXAS_BDI.sg} /></div></div>
-          <div><Num label="R — Riscos" suffix="%" value={b.r} onChange={(v) => setB({ r: v ?? 0 })} /><div className="mt-1"><FarolBadge f={farol(b.r, FAIXAS_BDI.r)} faixa={FAIXAS_BDI.r} /></div></div>
-          <div className="grid grid-cols-2 gap-2">
-            <Num label="Prazo receb." suffix="dias" value={b.prazoDias} onChange={(v) => setB({ prazoDias: v ?? 0 })} />
-            <Num label="Taxa" suffix="% a.m." value={b.taxaMes} onChange={(v) => setB({ taxaMes: v ?? 0 })} />
-            <p className="col-span-2 text-xs">DF = <b>{pct(r.df, 3)}</b> <FarolBadge f={farol(r.df, FAIXAS_BDI.df)} /></p>
-          </div>
+    <div className="space-y-4">
+      <Card bodyClass="p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span>Formação do preço deste estudo. Regime da empresa: <b>{regime}</b></span>
+          <Button size="sm" variant="ghost" icon={<RotateCcw size={14} />} onClick={() => upd({ metodo: params.metodo, referenciaTcu: params.referenciaTcu, bdi: { ...params.bdi }, markup: { ...params.markup }, bdiMateriais: { ...params.bdiMateriais } })}>
+            Restaurar o padrão dos parâmetros
+          </Button>
         </div>
-        <div className="mt-4 flex items-center justify-between rounded-lg bg-brand-50 p-3 dark:bg-brand-950/50">
-          <span className="text-sm">BDI do estudo</span>
-          <span className="text-2xl font-bold text-brand-800 dark:text-brand-200">{pct(r.bdi)}</span>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">Sem lucro (base do lance mínimo): {pct(r.bdiSemLucro)}. Faixas: 1º a 3º quartil do Acórdão TCU 2622/2013 (edificações) como referência para serviços de engenharia.</p>
       </Card>
+      <FormacaoPrecoEditor v={v} onChange={(patch) => upd(patch)} params={params} tributos={r.tributos.total} />
       <Card title="Tributos sobre o faturamento (I)" actions={<Link to="/precificacao/tributos" className="text-xs text-brand-700 hover:underline dark:text-brand-300">regime e alíquotas</Link>}>
-        {(params.regime !== 'simples' || r.tributos.simples?.faixa === 6) && (
-          <Num label="ISS do município de execução (deste estudo)" suffix="%" value={e.issAliquota} placeholder={num(params.issAliquota)} onChange={(v) => upd({ issAliquota: v })} className="mb-3 max-w-xs" help="Em branco = alíquota dos parâmetros" />
+        {(params.regime === 'presumido' || params.regime === 'real' || r.tributos.simples?.faixa === 6) && (
+          <Num label="ISS do município de execução (deste estudo)" suffix="%" value={e.issAliquota} placeholder={num(params.issAliquota)} onChange={(x) => upd({ issAliquota: x })} className="mb-3 max-w-xs" help="Em branco = alíquota dos parâmetros" />
         )}
         {r.tributos.itens.map((t) => (
           <div key={t.nome} className={cx('flex justify-between border-b border-slate-100 py-1 text-sm dark:border-slate-800', t.excluido && 'text-slate-400 line-through')}>
-            <span>{t.nome}</span>
+            <span>{t.nome}{t.obs && <span className="block text-xs text-slate-500">{t.obs}</span>}</span>
             <span className="tabular-nums">{pct(t.aliquota, 3)}</span>
           </div>
         ))}
@@ -519,23 +562,35 @@ function AbaBdi({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: ResultadoE
 }
 
 /* ---------------- 6. Resultado ---------------- */
-function AbaResultado({ e, upd, r }: { e: EstudoPreco; upd: Upd; r: ResultadoEstudo }) {
+function Alerta({ a, compacto }: { a: AlertaPreco; compacto?: boolean }) {
+  const icone = a.nivel === 'critico' ? <AlertTriangle size={16} className="shrink-0 text-rose-600" /> : a.nivel === 'atencao' ? <AlertTriangle size={16} className="shrink-0 text-amber-500" /> : <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />;
+  return (
+    <p className={cx('flex items-start gap-2 rounded-lg p-2', compacto && 'text-xs', a.nivel === 'critico' ? 'bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200' : a.nivel === 'atencao' ? 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200')}>
+      {icone} {a.texto}
+    </p>
+  );
+}
+
+function AbaResultado({ e, upd, r, params }: { e: EstudoPreco; upd: Upd; r: ResultadoEstudo; params: ParametrosPreco }) {
   const c = r.comparacao;
-  const icone = (n: string) => (n === 'critico' ? <AlertTriangle size={16} className="shrink-0 text-rose-600" /> : n === 'atencao' ? <AlertTriangle size={16} className="shrink-0 text-amber-500" /> : <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />);
+  const temEquip = r.equipamentosMensal > 0;
+  const mat = r.formacao.materiais;
   return (
     <div className="space-y-4">
-      <Card title="Composição do preço por item" bodyClass="p-0">
+      {r.alertasRegime.length > 0 && <div className="space-y-2">{r.alertasRegime.map((a, k) => <Alerta key={k} a={a} />)}</div>}
+      <Card title="Composição do preço por item" actions={<span className="text-xs text-slate-500">valores em R$, mensais por equipamento</span>} bodyClass="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead className="bg-slate-50 text-right text-xs uppercase text-slate-500 dark:bg-slate-800/60">
+          <table className="w-full min-w-[760px] text-xs">
+            <thead className="bg-slate-50 text-right text-[11px] uppercase text-slate-500 dark:bg-slate-800/60">
               <tr>
                 <th className="px-2 py-2 text-left">Item</th>
                 <th className="px-2 py-2">Horas</th>
                 <th className="px-2 py-2">Mão de obra</th>
+                {temEquip && <th className="px-2 py-2">Ferram. e veículo</th>}
                 <th className="px-2 py-2">Materiais</th>
                 <th className="px-2 py-2">Indiretos</th>
                 <th className="px-2 py-2">Custo direto</th>
-                <th className="px-2 py-2">BDI</th>
+                <th className="px-2 py-2">{r.formacao.metodo === 'markup' ? 'Markup' : 'BDI'}</th>
                 <th className="px-2 py-2">Preço unit.</th>
                 <th className="px-2 py-2">Qtd</th>
                 <th className="px-2 py-2">Total/mês</th>
@@ -546,20 +601,29 @@ function AbaResultado({ e, upd, r }: { e: EstudoPreco; upd: Upd; r: ResultadoEst
                 <tr key={i.item.id} className="border-t border-slate-100 text-right tabular-nums dark:border-slate-800">
                   <td className="px-2 py-1.5 text-left">{i.item.descricao || '—'}</td>
                   <td className="px-2 py-1.5">{num(i.horasUnit)}</td>
-                  <td className="px-2 py-1.5">{money(i.custoMO)}</td>
-                  <td className="px-2 py-1.5">{money(i.materiais)}</td>
-                  <td className="px-2 py-1.5">{money(i.rateio)}</td>
-                  <td className="px-2 py-1.5">{money(i.custoDireto)}</td>
-                  <td className="px-2 py-1.5">{money(i.precoUnit - i.custoDireto)}</td>
-                  <td className="px-2 py-1.5 font-semibold">{money(i.precoUnit)}</td>
+                  <td className="px-2 py-1.5">{num(i.custoMO)}</td>
+                  {temEquip && <td className="px-2 py-1.5">{num(i.custoEquip)}</td>}
+                  <td className="px-2 py-1.5">{num(i.materiais)}</td>
+                  <td className="px-2 py-1.5">{num(i.rateio)}</td>
+                  <td className="px-2 py-1.5">{num(i.custoDireto)}</td>
+                  <td className="px-2 py-1.5">{num(i.precoUnit - i.custoDireto)}</td>
+                  <td className="px-2 py-1.5 font-semibold">{num(i.precoUnit)}</td>
                   <td className="px-2 py-1.5">{i.item.quantidade}</td>
-                  <td className="px-2 py-1.5 font-semibold">{money(i.totalMensal)}</td>
+                  <td className="px-2 py-1.5 font-semibold">{num(i.totalMensal)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200 text-right font-bold dark:border-slate-700">
-                <td className="px-2 py-2 text-left" colSpan={8}>Preço mensal</td>
+                <td className="px-2 py-2 text-left">Total mensal</td>
+                <td className="px-2 py-2">{num(r.horasMes, 1)}</td>
+                <td className="px-2 py-2">{num(r.maoDeObraMensal)}</td>
+                {temEquip && <td className="px-2 py-2">{num(r.equipamentosMensal)}</td>}
+                <td className="px-2 py-2">{num(r.materiaisMensal)}</td>
+                <td className="px-2 py-2">{num(r.deslocamentoMensal + r.custosFixosMensal)}</td>
+                <td className="px-2 py-2">{num(r.custoDiretoMensal)}</td>
+                <td className="px-2 py-2">{num(r.precoMensal - r.custoDiretoMensal)}</td>
+                <td className="px-2 py-2" />
                 <td className="px-2 py-2">{r.quantidade}</td>
                 <td className="px-2 py-2">{money(r.precoMensal)}</td>
               </tr>
@@ -567,7 +631,7 @@ function AbaResultado({ e, upd, r }: { e: EstudoPreco; upd: Upd; r: ResultadoEst
           </table>
         </div>
       </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Valores da proposta">
           <div className="space-y-1 text-sm">
             <p className="flex justify-between"><span>Mensal</span><b>{money(r.precoMensal)}</b></p>
@@ -583,17 +647,26 @@ function AbaResultado({ e, upd, r }: { e: EstudoPreco; upd: Upd; r: ResultadoEst
             {e.status === 'elaboracao' && <Button variant="outline" onClick={() => upd({ status: 'enviado' })}>Marcar proposta como enviada</Button>}
           </div>
         </Card>
+        <Card title="Estrutura do preço mensal">
+          <div className="text-sm">
+            <LinhaResumo rotulo="Mão de obra" valor={money(r.maoDeObraMensal)} />
+            {temEquip && <LinhaResumo rotulo="Ferramentas e veículo" valor={money(r.equipamentosMensal)} />}
+            <LinhaResumo rotulo="Materiais de consumo" valor={money(r.materiaisMensal)} />
+            <LinhaResumo rotulo="Deslocamento e outros custos" valor={money(r.deslocamentoMensal + r.custosFixosMensal)} />
+            <LinhaResumo rotulo="Custo direto" valor={money(r.custoDiretoMensal)} forte />
+            <LinhaResumo rotulo={r.formacao.metodo === 'markup' ? `Markup (BDI equivalente ${pct(r.bdi)})` : `BDI ${pct(r.bdi)}`} valor={money(r.precoMensal - r.custoDiretoMensal)} dica={mat.ativo ? `materiais com ${pct(mat.bdi)}` : undefined} />
+            <LinhaResumo rotulo="Preço mensal" valor={money(r.precoMensal)} forte />
+            <LinhaResumo rotulo="Preço da hora técnica" valor={money(r.precoHoraTecnica)} dica={`custo-hora operacional ${money(r.custoHoraOperacional)} × (1 + ${pct(r.bdi)})`} />
+          </div>
+          {params.regime === 'mei' && <p className="mt-2 text-xs text-slate-500">MEI: sem tributo sobre o preço; o DAS fixo está nas despesas fixas.</p>}
+        </Card>
         <Card title="Exequibilidade em relação ao valor estimado">
           {!c ? (
-            <p className="text-sm text-slate-500">Informe o valor estimado do órgão em “1. Dados” para comparar.</p>
+            <p className="text-sm text-slate-500">Informe o valor estimado do órgão ou do cliente em “1. Dados” para comparar.</p>
           ) : (
             <div className="space-y-2 text-sm">
               <p>Proposta = <b>{pct(c.pct, 1)}</b> do estimado ({money(e.valorEstimadoMensal)}/mês).</p>
-              {c.alertas.map((a, k) => (
-                <p key={k} className={cx('flex items-start gap-2 rounded-lg p-2', a.nivel === 'critico' ? 'bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200' : a.nivel === 'atencao' ? 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200')}>
-                  {icone(a.nivel)} {a.texto}
-                </p>
-              ))}
+              {c.alertas.map((a, k) => <Alerta key={k} a={a} />)}
               {c.garantiaAdicional > 0 && <p>Garantia adicional estimada: <b>{money(c.garantiaAdicional)}</b> (diferença entre o orçado e a proposta na vigência).</p>}
               <p className="text-xs text-slate-500">Limites para {e.tipoServico === 'engenharia' ? 'serviço de engenharia: 75% (presunção relativa) e 85% (garantia adicional)' : 'serviço comum: 50% (indício, sujeito a diligência)'}.</p>
             </div>
